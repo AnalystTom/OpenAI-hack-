@@ -76,7 +76,7 @@ export default function RoomStudio({
     setDisplayName(EMPTY_PROFILE.displayName);
     setInterests("");
     setTheme(EMPTY_PROFILE.theme);
-    setMessage("Imported profile details removed from your room.");
+    setMessage("Room look reset.");
   }
   function addBook(event: FormEvent) {
     event.preventDefault();
@@ -138,7 +138,7 @@ export default function RoomStudio({
           <button className={tab === "invite" ? "active" : ""} onClick={() => { setTab("invite"); setMessage(""); }}><Share2 size={15} /> Invite</button>
         </nav>
         {tab === "profile" && <form className="studio-form" onSubmit={saveProfile}>
-          <div className="linked-social"><span>{socialUrl ? `Linked profile: ${socialUrl}` : interests ? "Room look based on your interests" : "No social profile imported yet"}</span><button type="button" className="quiet-button" onClick={() => { setTab("social"); setMessage(""); }}>{socialUrl ? "Change import" : "Import LinkedIn or X"}</button>{socialUrl && <button type="button" className="quiet-button" onClick={removeSocialImport}>Remove import</button>}</div>
+          <div className="linked-social"><span>{socialUrl ? `Linked profile: ${socialUrl}` : interests ? "Room look based on your interests" : "No social profile imported yet"}</span><button type="button" className="quiet-button" onClick={() => { setTab("social"); setMessage(""); }}>{socialUrl ? "Change import" : "Import LinkedIn or X"}</button>{(socialUrl || interests || displayName !== EMPTY_PROFILE.displayName || theme !== EMPTY_PROFILE.theme) && <button type="button" className="quiet-button" onClick={removeSocialImport}>Reset look</button>}</div>
           <label>Room name<input maxLength={50} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
           <label>Interests or bio keywords<input maxLength={180} placeholder="e.g. ocean science, design, robotics" value={interests} onChange={(event) => setInterests(event.target.value)} /></label>
           <div className="theme-row">{THEMES.map((option) => <button type="button" key={option.id} className={`theme-choice ${theme === option.id ? "active" : ""} theme-${option.id}`} onClick={() => setTheme(option.id)}>{option.name}</button>)}</div>

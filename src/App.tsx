@@ -666,7 +666,7 @@ export default function App() {
         </span>
       </footer>
       {!guest && studioTab && <RoomStudio key={studioTab} initialTab={studioTab} profile={profile} onProfile={setProfile} books={books} onBooks={setBooks} projects={projects} onProjects={setProjects} stats={stats} onStats={setStats} share={share} onShare={setShare} agents={visibleAgents} onClose={() => setStudioTab(null)} />}
-      {welcome && !guest && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onImport={(imported, importedLinks) => {
+      {welcome && !guest && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onSocialImport={() => { dismissWelcome(); setStudioTab("social"); }} onImport={(imported, importedLinks) => {
         const merged = addAgents(imported);
         setInteractions(importedLinks ?? []);
         setInteractionClock(Date.now());
