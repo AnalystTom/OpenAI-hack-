@@ -22,7 +22,7 @@
 .welcome-card .welcome-action { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 10px 12px; margin-top: 8px; border: 1px solid #d8dfce; border-radius: 8px; background: #fafbf6; color: #425738; font: 600 12px/18px "DM Sans", sans-serif; text-align: left; }
 .welcome-card .welcome-action > svg { flex-shrink: 0; }
 .welcome-card .welcome-action > :is(svg, span):last-child { margin-left: auto; }
-.welcome-card .welcome-action > svg:first-child { margin-left: 0; }
+.welcome-card .welcome-action > svg:first-child:not(:last-child) { margin-left: 0; }
 .welcome-card .welcome-action:hover, .welcome-close:hover { background: #edf2e4; }
 .welcome-card .welcome-primary { background: #344734; color: #fffefa; border-color: #344734; }
 .welcome-card .welcome-primary:hover { background: #435b40; }

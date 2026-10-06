@@ -63,3 +63,5 @@ Follow-up review: Lean already. Ship.
 Final review includes the combined rooms, live links, recorded production example, and import styling. Lean already. Ship.
 
 Validation: production build and 34 tests; fresh Playwright context verified fireworks above visible models, toy hammer pickup/drop, local workspace import with real run health, replay/pause, saved residents after reload, empty collections, default-off sharing, read-only guest entry, mobile overflow, and the production recorded-example entry. Review browser remains open.
+
+Import-button alignment follow-up: one scoped selector corrects the single-icon case. Lean already. Ship. Playwright verified the import dialog at mobile width without overflow.
