@@ -51,6 +51,8 @@ export function replayOffice(
       return {
         ...agent,
         status: "unknown",
+        health: undefined,
+        cost: undefined,
         contextUsed: null,
         contextWindow: null,
       };
@@ -64,6 +66,8 @@ export function replayOffice(
     return {
       ...agent,
       status: event.status,
+      health: undefined,
+      cost: undefined,
       playback: { state: at >= end ? "finished" : "playing", label: event.label },
       updatedAt: new Date(
         Math.min(at, Date.parse(history.at(-1)!.at)),

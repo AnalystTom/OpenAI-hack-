@@ -1,3 +1,4 @@
+import { AgentVitals } from "./components/AgentVitals";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   ArrowDownToLine,
@@ -503,16 +504,8 @@ export default function App() {
                         <dt>Model</dt>
                         <dd>{agent.model ?? "Not reported"}</dd>
                       </div>
-                      <div>
-                        <dt>Context</dt>
-                        <dd>
-                          {agent.contextUsed !== null &&
-                          agent.contextWindow !== null
-                            ? `${Math.round((agent.contextUsed / agent.contextWindow) * 100)}%`
-                            : "Not reported"}
-                        </dd>
-                      </div>
                     </dl>
+                    <AgentVitals agent={agent} />
                     <small>
                       Source event {new Date(agent.updatedAt).toLocaleString()}
                     </small>
@@ -632,7 +625,7 @@ export default function App() {
               <span className="codex-symbol">⌘</span>
               <div>
                 <b>Codex</b>
-                <small>Read sessions from your local Robots project</small>
+                <small>Read sessions from your configured local project</small>
               </div>
               <span className="connection-status">
                 {local.state === "connected" ? "Connected" : "Local only"}
@@ -641,7 +634,7 @@ export default function App() {
             <button className="file-import" onClick={connectRobots}>
               <Users size={19} />
               <span>
-                <b>Import Robots sessions</b>
+                <b>Import local sessions</b>
                 <small>
                   6 recent sessions · read-only · refreshes every 5s
                 </small>

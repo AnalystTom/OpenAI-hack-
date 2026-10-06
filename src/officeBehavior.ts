@@ -24,7 +24,16 @@ export function officePose(
   index: number,
   time: number,
   total: number,
+  retrying = false,
 ) {
+  if (status === "working" && retrying) {
+    const angle = time * 1.4 + index;
+    const center = DESKS[index % DESKS.length];
+    return { x: center.x * 1.15 + Math.cos(angle) * 0.65,
+      z: 0.55 + Math.sin(angle) * 0.65, y: 0.1,
+      facing: Math.atan2(-Math.sin(angle), Math.cos(angle)),
+      walking: true, sitting: false };
+  }
   if (status === "working") {
     const desk = DESKS[index % DESKS.length];
     return {

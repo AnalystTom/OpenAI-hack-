@@ -22,6 +22,7 @@ export function serializeOffice(agents: OfficeAgent[]) {
     id: a.id, name: a.name, harness: a.harness, model: a.model,
     status: a.status, task: a.task, activityLabel: a.activityLabel, contextUsed: a.contextUsed,
     contextWindow: a.contextWindow, updatedAt: a.updatedAt, character: a.character,
+    health: a.health, cost: a.cost,
     history: a.history?.map(({ at, status, label }) => ({ at, status, label })),
   })) });
 }

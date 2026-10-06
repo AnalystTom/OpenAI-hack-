@@ -41,6 +41,21 @@ export function parseOfficeSnapshot(text: string): OfficeSnapshot {
       );
     if (a.activityLabel !== undefined && a.activityLabel !== null && (typeof a.activityLabel !== "string" || a.activityLabel.length > 160))
       throw new Error("Activity label must be short text or null.");
+    if (a.cost !== undefined) {
+      if (!a.cost || (a.cost.estimatedUSD !== null &&
+          (typeof a.cost.estimatedUSD !== "number" || !Number.isFinite(a.cost.estimatedUSD) || a.cost.estimatedUSD < 0)) ||
+          ![a.cost.observedRequests, a.cost.unpricedRequests, a.cost.assumedModelRequests].every((n) => Number.isSafeInteger(n) && n >= 0) ||
+          a.cost.unpricedRequests + a.cost.assumedModelRequests > a.cost.observedRequests)
+        throw new Error("Cost must be an estimate or null, with an observed request count.");
+    }
+    if (a.health !== undefined) {
+      const h = a.health;
+      if (!h || !["healthy", "watch", "error", "unknown"].includes(h.state) ||
+          typeof h.retrying !== "boolean" ||
+          ![h.toolFailures, h.retries, h.recoveredRetries].every((n) => Number.isSafeInteger(n) && n >= 0) ||
+          h.recoveredRetries > h.retries)
+        throw new Error("Run health needs a valid state and observed counts.");
+    }
     if (a.history !== undefined) {
       if (!Array.isArray(a.history) || a.history.length > 100)
         throw new Error("History must contain at most 100 recorded events.");

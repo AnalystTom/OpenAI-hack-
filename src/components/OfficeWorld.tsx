@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Billboard,
@@ -293,6 +293,7 @@ function Walker({
   hammerHeld,
   hitAt,
   onHit,
+  retrying = false,
 }: {
   id: string;
   kind: CharacterKind;
@@ -308,6 +309,7 @@ function Walker({
   hammerHeld: boolean;
   hitAt?: number;
   onHit: () => void;
+  retrying?: boolean;
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
@@ -326,7 +328,7 @@ function Walker({
   }, [kind]);
   useFrame((_, dt) => {
     if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const pose = officePose(hitAt === undefined ? status : "working", index, elapsed.current, total);
+    const pose = officePose(hitAt === undefined ? status : "working", index, elapsed.current, total, retrying);
     if (visual.current) {
       const impact = hitAt === undefined ? 0 : Math.max(0, 1 - (performance.now() - hitAt) / 400);
       visual.current.scale.set(1 + impact * 0.18, 1 - impact * 0.2, 1 + impact * 0.18);
@@ -433,6 +435,8 @@ export default function OfficeWorld({
   const [swingAt, setSwingAt] = useState(0);
   const [hammerHits, setHammerHits] = useState<Record<string, number>>({});
   const [lastHit, setLastHit] = useState<string | null>(null);
+  const dropHammer = useCallback(() => setHammerHeld(false), []);
+  const swingHammer = useCallback(() => setSwingAt(performance.now()), []);
   function hitAgent(id: string, name: string) {
     const at = performance.now();
     setSwingAt(at);
@@ -461,7 +465,6 @@ export default function OfficeWorld({
       onCreated={onReady}
       aria-label="Interactive 3D office"
       style={{ cursor: hammerHeld ? "none" : "auto" }}
-      onPointerMissed={() => { if (hammerHeld) setSwingAt(performance.now()); }}
     >
       <color attach="background" args={[night ? "#252e32" : "#e9ebe5"]} />
       <ambientLight intensity={night ? 0.8 : 1.6} />
@@ -481,7 +484,7 @@ export default function OfficeWorld({
         <Room night={night} />
       </Suspense>
       <Tibo celebrating={fireworkStartedAt !== null} />
-      <ToyHammer held={hammerHeld} swingAt={swingAt} onPickUp={() => { document.body.style.cursor = "auto"; onSelect(""); setHammerHeld(true); }} onDrop={() => setHammerHeld(false)} />
+      <ToyHammer held={hammerHeld} swingAt={swingAt} onPickUp={() => { document.body.style.cursor = "auto"; onSelect(""); setHammerHeld(true); }} onDrop={dropHammer} onSwing={swingHammer} />
       {!hammerHeld && <Billboard position={[3.8, 2.4, 5.2]}>
         <Label text="TOY HAMMER" subtitle="Pick up. Tap a coworker." position={[0, 0, 0]} width={3.2} height={0.8} bg="#fff4db" color="#594b32" />
       </Billboard>}
@@ -521,6 +524,7 @@ export default function OfficeWorld({
             label: a.name,
             status: a.status,
             statusText: agentActivityLabel(a),
+            retrying: a.health?.retrying,
           }))
       ].map((a, i, array) => (
         <Walker

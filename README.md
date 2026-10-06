@@ -26,7 +26,7 @@ The current build contains a walking Three.js character playground, six referenc
 - [Hosted Codex import workstream](docs/tasks/02-codex-import.md)
 - App shell, integration, and deployment coordination remain with the third workstream.
 
-The shared data contract is in `src/types.ts`. Snapshot data stays in the current browser tab and clears on refresh. Do not commit real session exports or credentials.
+The shared data contract is in `src/types.ts`. Imported agents join the existing world and are saved in this browser across refreshes. The welcome card overlays the running world; its skip button dismisses it without resetting the scene. Do not commit real session exports or credentials.
 
 Office code and assets are adapted from [Claw3D](https://github.com/iamlukethedev/Claw3D); see `THIRD_PARTY_LICENSES/` for attribution and the source revision.
 

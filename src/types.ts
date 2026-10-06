@@ -13,6 +13,13 @@ export interface RecordedActivity {
   status: AgentStatus;
   label: string;
 }
+export interface RunHealth {
+  state: "healthy" | "watch" | "error" | "unknown";
+  retrying: boolean;
+  toolFailures: number;
+  retries: number;
+  recoveredRetries: number;
+}
 export interface OfficeAgent {
   id: string;
   name: string;
@@ -29,6 +36,8 @@ export interface OfficeAgent {
   activityLabel?: string | null;
   /** Local playback controls, never source session telemetry. */
   playback?: { state: "playing" | "finished"; label: string };
+  health?: RunHealth;
+  cost?: { estimatedUSD: number | null; observedRequests: number; unpricedRequests: number; assumedModelRequests: number };
 }
 export interface OfficeSnapshot {
   version: 1;
