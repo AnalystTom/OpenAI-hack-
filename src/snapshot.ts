@@ -1,0 +1,69 @@
+import type { OfficeSnapshot } from "./types";
+export function parseOfficeSnapshot(text: string): OfficeSnapshot {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("This file is not valid JSON.");
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("version" in value) ||
+    value.version !== 1 ||
+    !("agents" in value) ||
+    !Array.isArray(value.agents)
+  )
+    throw new Error(
+      "Choose an office snapshot with version 1 and an agents array.",
+    );
+  if (value.agents.length > 50)
+    throw new Error("This office supports up to 50 agents per snapshot.");
+  const ids = new Set<string>();
+  for (const a of value.agents) {
+    if (
+      !a ||
+      typeof a !== "object" ||
+      typeof a.id !== "string" ||
+      !a.id.trim() ||
+      typeof a.name !== "string" ||
+      !a.name.trim() ||
+      typeof a.harness !== "string" ||
+      !a.harness.trim() ||
+      !["working", "idle", "blocked", "error", "offline", "unknown"].includes(
+        a.status,
+      ) ||
+      typeof a.updatedAt !== "string" ||
+      !Number.isFinite(Date.parse(a.updatedAt))
+    )
+      throw new Error(
+        "Each agent needs an id, name, harness, valid status, and updatedAt timestamp.",
+      );
+    if (ids.has(a.id)) throw new Error("Agent IDs must be unique.");
+    ids.add(a.id);
+    for (const key of ["model", "task"])
+      if (a[key] !== null && typeof a[key] !== "string")
+        throw new Error(`${key} must be text or null.`);
+    for (const key of ["contextUsed", "contextWindow"])
+      if (
+        a[key] !== null &&
+        (typeof a[key] !== "number" || !Number.isFinite(a[key]) || a[key] < 0)
+      )
+        throw new Error(`${key} must be a non-negative number or null.`);
+    if (a.contextWindow === 0)
+      throw new Error("Context window must be greater than zero, or null.");
+    if (
+      a.character !== undefined &&
+      ![
+        "blue-dot",
+        "frog-dot",
+        "yellow-dot",
+        "pink-dot",
+        "purple-dot",
+        "lovable",
+      ].includes(a.character)
+    )
+      throw new Error("Unknown character selection.");
+  }
+  return value as OfficeSnapshot;
+}

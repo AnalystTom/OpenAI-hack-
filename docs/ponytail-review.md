@@ -1,0 +1,14 @@
+# Ponytail review — initial Dots build
+
+Reviewed all new app code and copied Claw3D modules before the first app commit.
+
+1. `src/features/retro-office/objects/furniture.tsx`: delete: unused interactive editor, placement ghost, task-board clutter, and their imports. Keep the instanced furniture renderer actually used by the office. Addressed.
+2. `src/features/retro-office/core/geometry.ts`: delete: unused editor/navigation helpers and metadata. Keep world coordinates, furniture footprints, and rotation helpers used by the renderer. Addressed.
+3. `src/features/retro-office/core/constants.ts`: delete: unused room migrations, simulation settings, and storage keys. Keep only canvas dimensions and coordinate scale. Addressed.
+4. `src/features/retro-office/objects/types.ts`: delete: props used only by the removed editor renderer. Addressed.
+
+net: -678 lines applied.
+
+Follow-up review: Lean already. Ship.
+
+Validation: production build; snapshot parser tests; Playwright fresh-browser office navigation, character selection, pause/resume, day/night, camera reset, empty office, invalid import, mobile overflow check, and rendered screenshot inspection. Live Codex connection remains explicitly unavailable and delegated in the import handoff.
