@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   parseSessionEvents,
   localRequestAllowed,
+  readRobotsSessions,
 } from "../server/codex-sessions.mjs";
 const at = "2026-10-06T18:00:00.000Z";
 const now = Date.parse(at);
@@ -69,6 +74,37 @@ test("source text and tool arguments never leak into activity history", () => {
       parseSessionEvents([start, tool, end].join("\n"), now + 60000),
     ).match(/SENSITIVE_TEST_VALUE|PRIVATE_REPLY/),
   );
+});
+test("local feed connects two selected sessions through recorded delegation and message metadata", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "dots-sessions-"));
+  const database = new DatabaseSync(path.join(directory, "state_5.sqlite"));
+  try {
+    database.exec("CREATE TABLE threads (id TEXT, name TEXT, title TEXT, model TEXT, agent_path TEXT, created_at INTEGER, updated_at INTEGER, rollout_path TEXT, archived INTEGER, cwd TEXT)");
+    database.exec("CREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT, status TEXT)");
+    const source = path.join(directory, "source.jsonl");
+    const target = path.join(directory, "target.jsonl");
+    const began = new Date(now - 30000).toISOString();
+    const sent = new Date(now - 10000).toISOString();
+    await writeFile(source, [
+      event("event_msg", { type: "task_started" }, began),
+      event("response_item", { type: "function_call", name: "send_message_to_thread", arguments: JSON.stringify({ threadId: "target-session", prompt: "PRIVATE_MESSAGE" }) }, sent),
+      event("response_item", { type: "function_call", name: "exec", arguments: "const result = await tools.mcp__codex_app__send_message_to_thread({threadId:'target-session',prompt:'PRIVATE_NESTED'});" }, new Date(now - 9000).toISOString()),
+      event("response_item", { type: "function_call", name: "send_message", arguments: JSON.stringify({ target: "/root/target", message: "PRIVATE_DIRECT" }) }, new Date(now - 8000).toISOString()),
+    ].join("\n"));
+    await writeFile(target, event("event_msg", { type: "task_started" }, began));
+    const insert = database.prepare("INSERT INTO threads VALUES (?,?,?,?,?,?,?,?,?,?)");
+    insert.run("source-session", "Source", "", "gpt-6", null, (now - 40000) / 1000, (now - 10000) / 1000, source, 0, "/sample");
+    insert.run("target-session", "Target", "", "gpt-6", "/root/target", (now - 20000) / 1000, (now - 10000) / 1000, target, 0, "/sample");
+    database.prepare("INSERT INTO thread_spawn_edges VALUES (?,?,?)").run("source-session", "target-session", "open");
+    database.close();
+    const snapshot = await readRobotsSessions({ codexHome: directory, project: "/sample", now });
+    assert.deepEqual(snapshot.agents.map((agent) => agent.status), ["working", "working"]);
+    assert.deepEqual(snapshot.interactions.map((link) => link.kind).sort(), ["delegation", "message", "message", "message"]);
+    assert.ok(!/PRIVATE_MESSAGE|PRIVATE_NESTED|PRIVATE_DIRECT/.test(JSON.stringify(snapshot)));
+  } finally {
+    try { database.close(); } catch { /* Already closed after writing. */ }
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 test("local endpoint rejects remote clients, cross-origin and DNS rebinding hosts", () => {
   const valid = {

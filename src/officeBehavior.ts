@@ -1,4 +1,30 @@
-import type { AgentStatus, CharacterKind } from "./types";
+import type { AgentInteraction, AgentStatus, CharacterKind, OfficeAgent } from "./types";
+
+export interface LiveInteraction extends AgentInteraction {
+  slot: number;
+}
+
+/** Recent recorded links between two sessions that are both still running. */
+export function liveInteractions(
+  agents: OfficeAgent[],
+  recorded: AgentInteraction[],
+  now = Date.now(),
+): LiveInteraction[] {
+  const working = new Set(agents.filter((agent) => agent.status === "working").map((agent) => agent.id));
+  const occupied = new Set<string>();
+  const result: LiveInteraction[] = [];
+  for (const link of [...recorded].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))) {
+    const age = now - Date.parse(link.at);
+    if (!Number.isFinite(age) || age < -5000 || age > 90000 ||
+      !working.has(link.fromId) || !working.has(link.toId) ||
+      link.fromId === link.toId || occupied.has(link.fromId) || occupied.has(link.toId)) continue;
+    occupied.add(link.fromId);
+    occupied.add(link.toId);
+    result.push({ ...link, slot: result.length });
+    if (result.length === 2) break;
+  }
+  return result;
+}
 
 export const DESKS = [-5.8, -2.1, 1.6].flatMap((x) =>
   [-4.4, 3.6].map((z) => ({ x, z })),
@@ -21,7 +47,20 @@ export function officePose(
   index: number,
   time: number,
   total: number,
+  interaction?: { slot: number; side: "from" | "to" },
 ) {
+  if (status === "working" && interaction) {
+    const anchor = interaction.slot === 0 ? { x: 3.6, z: 2.5 } : { x: -4.2, z: 2.5 };
+    const side = interaction.side === "from" ? -1 : 1;
+    return {
+      x: anchor.x + side * 1.05 + Math.sin(time * 2.5 + index) * 0.1,
+      z: anchor.z + Math.cos(time * 2.5 + index) * 0.12,
+      y: 0.1 + Math.abs(Math.sin(time * 3 + index)) * 0.09,
+      facing: side < 0 ? Math.PI / 2 : -Math.PI / 2,
+      walking: true,
+      sitting: false,
+    };
+  }
   if (status === "working") {
     const desk = DESKS[index % DESKS.length];
     return {
@@ -33,8 +72,19 @@ export function officePose(
       sitting: true,
     };
   }
-  if (status === "idle" || status === "preview") {
-    // A six-second pause each lap is visual idle behaviour, never source activity.
+  if (status === "idle") {
+    // Resting in the lounge is visibly different from active work or play.
+    return {
+      x: 4.9 + (index % 3) * 1.6,
+      z: -2.6 + Math.floor(index / 3) * 1.45,
+      y: 0.1,
+      facing: 0,
+      walking: false,
+      sitting: false,
+    };
+  }
+  if (status === "preview") {
+    // Character previews have no associated session activity.
     const cycle = 30;
     const phase = time % cycle;
     const travel =

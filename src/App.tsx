@@ -23,9 +23,9 @@ import {
   X,
 } from "lucide-react";
 import OfficeWorld, { CHARACTERS } from "./components/OfficeWorld";
-import type { OfficeAgent, RecordedActivity } from "./types";
+import type { AgentInteraction, OfficeAgent, RecordedActivity } from "./types";
 import { parseOfficeSnapshot } from "./snapshot";
-import { agentCharacter } from "./officeBehavior";
+import { agentCharacter, liveInteractions } from "./officeBehavior";
 import { useRobotsSessions } from "./integrations/codex/useRobotsSessions";
 import RoomStudio from "./components/RoomStudio";
 import {
@@ -54,6 +54,8 @@ const roomDraft = readRoomDraft();
 
 export default function App() {
   const [agents, setAgents] = useState<OfficeAgent[]>([]);
+  const [interactions, setInteractions] = useState<AgentInteraction[]>([]);
+  const [interactionClock, setInteractionClock] = useState(Date.now());
   const [preview, setPreview] = useState(
     () => sessionStorage.getItem("dots-robots-connected") !== "yes",
   );
@@ -93,7 +95,16 @@ export default function App() {
   const character = showPreview
     ? CHARACTERS.find((c) => c.kind === selected)
     : undefined;
-  const local = useRobotsSessions(setAgents);
+  const local = useRobotsSessions((snapshot) => {
+    setAgents(snapshot.agents);
+    setInteractions(snapshot.interactions ?? []);
+    setInteractionClock(Date.now());
+  });
+  useEffect(() => {
+    if (!interactions.length) return;
+    const timer = setInterval(() => setInteractionClock(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, [interactions.length]);
   const [replay, setReplay] = useState<{
     id: string;
     history: RecordedActivity[];
@@ -129,6 +140,12 @@ export default function App() {
       : a;
   });
   const roomAgents = guest?.agents ?? visibleAgents;
+  const activeLinks = guest || showPreview || replay || (local.enabled && local.state !== "connected")
+    ? [] : liveInteractions(roomAgents, interactions, interactionClock);
+  const linkedPartner = (id: string) => {
+    const link = activeLinks.find((item) => item.fromId === id || item.toId === id);
+    return link && roomAgents.find((item) => item.id === (link.fromId === id ? link.toId : link.fromId));
+  };
   const agent = !showPreview
     ? roomAgents.find((a) => a.id === selected)
     : undefined;
@@ -139,7 +156,9 @@ export default function App() {
   function selectProject(id: string) { setSelected(null); setSelectedBook(null); setSelectedProject(id); }
   function leaveGuest() { window.location.hash = ""; setGuest(null); }
   const behavior = (a: OfficeAgent) =>
-    a.status === "working"
+    linkedPartner(a.id)
+      ? `Working with ${linkedPartner(a.id)!.name}`
+      : a.status === "working"
       ? "Working at desk"
       : a.status === "idle"
         ? "Waiting for a task"
@@ -151,6 +170,7 @@ export default function App() {
   function connectRobots() {
     setReplay(null);
     setSelected(null);
+    setInteractions([]);
     setPreview(false);
     setModal(false);
     local.connect();
@@ -172,6 +192,8 @@ export default function App() {
       local.disconnect();
       setReplay(null);
       setAgents(snapshot.agents);
+      setInteractions(snapshot.interactions ?? []);
+      setInteractionClock(Date.now());
       setPreview(false);
       setSelected(null);
       setModal(false);
@@ -314,7 +336,7 @@ export default function App() {
             {!guest && local.enabled && (
               <div className="connection-summary">
                 <b>
-                  Robots ·{" "}
+                  {local.project || "Codex"} ·{" "}
                   {local.state === "connected" ? "local feed" : local.state}
                 </b>
                 <span>
@@ -326,6 +348,7 @@ export default function App() {
                     local.disconnect();
                     setReplay(null);
                     setAgents([]);
+                    setInteractions([]);
                   }}
                 >
                   Disconnect
@@ -343,7 +366,7 @@ export default function App() {
                   {showPreview
                     ? "Character preview · no live agent activity"
                     : guest ? "Read-only invitation snapshot" : local.enabled
-                      ? "Visualising session events · refreshed every 5s"
+                      ? "Recorded status and links · refreshed every 5s"
                       : "Imported snapshots are not live connections."}
                 </small>
               </p>
@@ -385,6 +408,7 @@ export default function App() {
           </div>
           <OfficeWorld
             agents={roomAgents}
+            interactions={activeLinks}
             preview={showPreview}
             paused={paused}
             night={night}
@@ -426,6 +450,16 @@ export default function App() {
               </button>
             </div>
           )}
+          {activeLinks.length > 0 && <div className="collaboration-banner" role="status">
+            <b>Recent session link</b>
+            {activeLinks.map((link) => {
+              const from = roomAgents.find((item) => item.id === link.fromId);
+              const to = roomAgents.find((item) => item.id === link.toId);
+              return <button key={`${link.fromId}-${link.toId}`} onClick={() => selectAgent(link.fromId)}>
+                {from?.name} + {to?.name} · {link.kind === "delegation" ? "delegation" : "message call"}
+              </button>;
+            })}
+          </div>}
           {!ready && <div className="loading-state">Opening the office…</div>}
           {!guest && !showPreview && !agents.length && (
             <div className="world-empty">
@@ -447,7 +481,7 @@ export default function App() {
                 character to say hello.
               </p>
               <small>
-                Movement in the playground is animation, not agent activity.
+                Live positions follow recorded session state. Play appears only after a recent recorded link between two working sessions.
               </small>
             </div>
           )}
@@ -473,6 +507,7 @@ export default function App() {
                   {replay?.id === agent.id ? " · recorded replay" : ""}
                 </span>
               )}
+              {agent && linkedPartner(agent.id) && <small>Recent recorded session link with {linkedPartner(agent.id)!.name}. The play animation shows that link, not message contents.</small>}
               {agent && (
                 <small>
                   {agent.status === "working"
@@ -594,7 +629,7 @@ export default function App() {
             : replay
               ? "Recorded task replay · no task is being executed"
               : local.enabled
-                ? `${agents.length} Robots sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
+                ? `${agents.length} local sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
                 : `${agents.length} imported agents · snapshot mode`}
         </span>
         <span>
@@ -632,7 +667,7 @@ export default function App() {
               <span className="codex-symbol">⌘</span>
               <div>
                 <b>Codex</b>
-                <small>Read sessions from your local Robots project</small>
+                <small>Read sessions for this workspace from local Codex</small>
               </div>
               <span className="connection-status">
                 {local.state === "connected" ? "Connected" : "Local only"}
@@ -641,7 +676,7 @@ export default function App() {
             <button className="file-import" onClick={connectRobots}>
               <Users size={19} />
               <span>
-                <b>Import Robots sessions</b>
+                <b>Connect local sessions</b>
                 <small>
                   6 recent sessions · read-only · refreshes every 5s
                 </small>

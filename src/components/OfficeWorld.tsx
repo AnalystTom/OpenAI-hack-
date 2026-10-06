@@ -54,7 +54,7 @@ export const CHARACTERS: {
     description: "A little heart with a whole lot of build energy.",
   },
 ];
-import { DESKS, agentCharacter, officePose } from "../officeBehavior";
+import { DESKS, agentCharacter, officePose, type LiveInteraction } from "../officeBehavior";
 const noop = () => {};
 const PALETTES: Record<RoomTheme, { backdrop: string; floor: string; wall: string; rug: string; lounge: string; window: string; accent: string }> = {
   studio: { backdrop: "#e9ebe5", floor: "#d7dccc", wall: "#eeeae0", rug: "#94ad90", lounge: "#d2b997", window: "#d9e8e4", accent: "#7f9c77" },
@@ -323,6 +323,30 @@ function ContextMeter({ agent }: { agent: OfficeAgent }) {
     {known ? <RoundedBox args={[0.13, Math.max(0.005, fraction * 0.75), 0.14]} radius={0.03} smoothness={2} position={[0, 0.63 + fraction * 0.375, 0.015]}><meshStandardMaterial color={fraction > 0.85 ? "#e79d57" : "#7cbd86"} /></RoundedBox> : <Label text="?" position={[0, 1.02, 0.08]} width={0.16} height={0.25} bg="#e7e9e2" color="#6d7a73" fontSize={90} />}
   </group>;
 }
+function TeamUp({ slot, accent, paused, reducedMotion }: { slot: number; accent: string; paused: boolean; reducedMotion: boolean }) {
+  const orb = useRef<THREE.Group>(null);
+  const elapsed = useRef(0);
+  const x = slot === 0 ? 3.6 : -4.2;
+  useFrame((_, dt) => {
+    if (!paused && !reducedMotion) elapsed.current += Math.min(dt, 0.05);
+    if (orb.current) {
+      orb.current.position.x = Math.sin(elapsed.current * 2.6) * 0.72;
+      orb.current.position.y = 1.16 + Math.abs(Math.sin(elapsed.current * 2.6)) * 0.42;
+      orb.current.rotation.y = elapsed.current * 2;
+    }
+  });
+  return <group position={[x, 0, 2.5]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.09, 0]}>
+      <ringGeometry args={[1.38, 1.46, 48]} />
+      <meshBasicMaterial color={accent} transparent opacity={0.7} side={THREE.DoubleSide} />
+    </mesh>
+    <group ref={orb}>
+      <mesh><sphereGeometry args={[0.22, 20, 16]} /><meshStandardMaterial color="#fff8d7" emissive={accent} emissiveIntensity={0.8} /></mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.32, 0.035, 8, 32]} /><meshBasicMaterial color={accent} /></mesh>
+    </group>
+    <Billboard position={[0, 2.85, 0]}><Label text="TEAM UP" position={[0, 0, 0]} width={1.65} height={0.38} bg={accent} color="#fffdf2" fontSize={75} /></Billboard>
+  </group>;
+}
 function Walker({
   kind,
   index,
@@ -334,6 +358,7 @@ function Walker({
   status,
   agent,
   reducedMotion,
+  interaction,
 }: {
   kind: CharacterKind;
   index: number;
@@ -345,6 +370,7 @@ function Walker({
   status: AgentStatus | "preview";
   agent?: OfficeAgent;
   reducedMotion: boolean;
+  interaction?: { slot: number; side: "from" | "to" };
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
@@ -361,7 +387,7 @@ function Walker({
   }, [kind]);
   useFrame((_, dt) => {
     if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const pose = officePose(status, index, reducedMotion ? 0 : elapsed.current, total);
+    const pose = officePose(status, index, reducedMotion ? 0 : elapsed.current, total, interaction);
     if (parent.current) {
       const target = new THREE.Vector3(pose.x, pose.y, pose.z);
       const moving = parent.current.position.distanceTo(target) > 0.12;
@@ -428,6 +454,7 @@ function CameraReset({ resetKey }: { resetKey: number }) {
 }
 export default function OfficeWorld({
   agents,
+  interactions,
   preview,
   paused,
   night,
@@ -445,6 +472,7 @@ export default function OfficeWorld({
   onReady,
 }: {
   agents: OfficeAgent[];
+  interactions: LiveInteraction[];
   preview: boolean;
   paused: boolean;
   night: boolean;
@@ -498,6 +526,7 @@ export default function OfficeWorld({
       <KnowledgeDisplay books={books} selected={selectedBook} onSelect={onSelectBook} accent={palette.accent} />
       <ProjectWall projects={projects} selected={selectedProject} onSelect={onSelectProject} accent={palette.accent} />
       <InvitePortal onInvite={onInvite} accent={palette.accent} />
+      {interactions.map((link) => <TeamUp key={`${link.fromId}-${link.toId}`} slot={link.slot} accent={palette.accent} paused={paused} reducedMotion={reducedMotion} />)}
       {(preview
         ? CHARACTERS.map((c) => ({
             id: c.kind,
@@ -511,6 +540,10 @@ export default function OfficeWorld({
             label: a.name,
             status: a.status,
             agent: a,
+            interaction: (() => {
+              const link = interactions.find((item) => item.fromId === a.id || item.toId === a.id);
+              return link ? { slot: link.slot, side: link.fromId === a.id ? "from" as const : "to" as const } : undefined;
+            })(),
           }))
       ).map((a, i, array) => (
         <Walker

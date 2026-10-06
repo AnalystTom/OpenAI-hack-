@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OfficeAgent } from "../../types";
+import type { OfficeSnapshot } from "../../types";
 import { parseOfficeSnapshot } from "../../snapshot";
 
-export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
+export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void) {
   const [connected, setConnected] = useState(
     () => sessionStorage.getItem("dots-robots-connected") === "yes",
   );
@@ -12,14 +12,16 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
   const [error, setError] = useState("");
   const [observedAt, setObservedAt] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const receive = useRef(onAgents);
-  receive.current = onAgents;
+  const [project, setProject] = useState("");
+  const receive = useRef(onSnapshot);
+  receive.current = onSnapshot;
   const disconnect = useCallback(() => {
     sessionStorage.removeItem("dots-robots-connected");
     setConnected(false);
     setState("disconnected");
     setError("");
     setObservedAt(null);
+    setProject("");
   }, []);
   const connect = useCallback(() => {
     sessionStorage.setItem("dots-robots-connected", "yes");
@@ -51,8 +53,9 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
           throw new Error(data.error ?? "Cannot read local sessions.");
         const snapshot = parseOfficeSnapshot(JSON.stringify(data));
         if (cancelled) return;
-        receive.current(snapshot.agents);
+        receive.current(snapshot);
         setTotal(data.total);
+        setProject(typeof data.project === "string" ? data.project : "");
         setObservedAt(data.observedAt);
         setState("connected");
         setError("");
@@ -77,6 +80,7 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
     error,
     observedAt,
     total,
+    project,
     enabled: connected,
   };
 }

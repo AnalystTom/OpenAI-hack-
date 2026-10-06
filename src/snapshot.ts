@@ -90,5 +90,24 @@ export function parseOfficeSnapshot(text: string): OfficeSnapshot {
     )
       throw new Error("Unknown character selection.");
   }
+  if ("interactions" in value && value.interactions !== undefined) {
+    if (!Array.isArray(value.interactions) || value.interactions.length > 100)
+      throw new Error("A snapshot supports up to 100 recorded session links.");
+    for (const link of value.interactions) {
+      if (
+        !link ||
+        typeof link !== "object" ||
+        typeof link.fromId !== "string" ||
+        typeof link.toId !== "string" ||
+        !ids.has(link.fromId) ||
+        !ids.has(link.toId) ||
+        link.fromId === link.toId ||
+        !["delegation", "message"].includes(link.kind) ||
+        typeof link.at !== "string" ||
+        !Number.isFinite(Date.parse(link.at))
+      )
+        throw new Error("Session links need two known agents, a kind, and a timestamp.");
+    }
+  }
   return value as OfficeSnapshot;
 }

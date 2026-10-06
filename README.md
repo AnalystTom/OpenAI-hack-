@@ -18,7 +18,7 @@ npm run dev
 
 Open http://127.0.0.1:3000. Production: `npm run build` (output: `dist/`). Verification: `npm test`.
 
-The current build contains a walking Three.js character playground, six reference-based models, a Claw3D-derived office, camera/lighting controls, and validated JSON agent snapshot import. Live Codex pairing and hosted account/session import are the next workstream; the app explicitly distinguishes character previews from imported data.
+The current build contains a Three.js character playground, six reference-based models, a Claw3D-derived office, camera/lighting controls, validated JSON agent snapshot import, and a local Codex session feed. Hosted account/session import is a separate workstream; the app distinguishes character previews from imported data.
 
 ## Teammate ownership
 
@@ -38,13 +38,14 @@ The **Books** tab stores owner-written summaries of actual learning, optionally 
 
 The **Invite** tab creates a read-only snapshot link. The owner chooses whether to include their social link and interests, agent names/models/statuses, books, projects, and manually entered token/spending totals. All categories start off. Agent task text, current context telemetry, source session IDs, and recorded history are excluded from invitations. Per-agent token/spending totals appear only when both agents and totals are shared. Anyone with the link can read the selected snapshot; it is encoded in the URL fragment and is not a live connection. Friends can open the link directly or paste it into **Visit a friend's room**. There is no hosted room account, presence, revocation, or automatic spending feed yet.
 
-## Local Robots session feed
+## Local Codex session feed
 
-In the import dialog choose **Import Robots sessions**. The local dev server reads up to six recent, non-archived sessions whose project is `~/Dev/Robots`. It refreshes every five seconds using the local Codex SQLite index and bounded tails of each session event log. Credentials and tool arguments/output are never returned. No session data is committed or bundled into the site.
+In the import dialog choose **Connect local sessions**. The local dev server reads up to six recent, non-archived sessions for the nearest Codex workspace containing this checkout. Set `DOTS_SESSION_CWD` to a specific session working directory if automatic selection is wrong. It refreshes every five seconds using the local Codex SQLite index and bounded tails of each session event log. Credentials, message bodies, and tool arguments/output are never returned. No session data is committed or bundled into the site.
 
 - Recorded running work sends the character to a desk with a seated typing animation.
-- A completed/interrupted turn becomes idle and the character wanders with short pauses.
+- A completed/interrupted turn becomes idle and the character rests in the lounge.
 - Missing, unreadable, or stale running state is unknown; connection loss stops work animation.
+- A recent recorded parent/child delegation or session message call links two currently working characters in a short playful team-up. The room shows the link type and both names, never the message. A link fades after 90 seconds or when either session stops working. Other concurrent work remains at its desk. Imported version 1 snapshots may also include an optional `interactions` array with `fromId`, `toId`, `at`, and `kind` (`delegation` or `message`).
 - **Replay last recorded task** compresses that session's actual last completed task into 20 seconds, explicitly labelled as a replay. It does not execute or restart a task.
 
-This reader runs only on the loopback development server. The public site's remote pairing/upload flow is still owned by workstream 2. `server/codex-sessions.mjs` returns the shared `OfficeSnapshot` contract with optional recorded history and can inform that connector without exposing the local database.
+This reader runs only on the loopback development server. The public site's remote pairing/upload flow is still owned by workstream 2. `server/codex-sessions.mjs` returns the shared `OfficeSnapshot` contract with optional recorded history and session links. Messages sent through tools that do not expose a structured destination in the rollout are not detected, so the room does not infer a link from coincident activity.

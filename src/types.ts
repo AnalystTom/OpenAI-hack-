@@ -27,7 +27,15 @@ export interface OfficeAgent {
   sourceUrl?: string;
   history?: RecordedActivity[];
 }
+/** A recorded link between two sessions; message contents are never included. */
+export interface AgentInteraction {
+  fromId: string;
+  toId: string;
+  at: string;
+  kind: "delegation" | "message";
+}
 export interface OfficeSnapshot {
   version: 1;
   agents: OfficeAgent[];
+  interactions?: AgentInteraction[];
 }
