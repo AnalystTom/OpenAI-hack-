@@ -71,7 +71,7 @@ const projectExample = parseOfficeSnapshot(JSON.stringify(projectExampleSource))
 export default function App() {
   const [saved] = useState(() => {
     try { return readSavedOffice(localStorage); }
-    catch { return { agents: [], error: "Browser storage is unavailable. Your office cannot be saved on this device." }; }
+    catch { return { agents: [], interactions: [], error: "Browser storage is unavailable. Your office cannot be saved on this device." }; }
   });
   const showProjectExampleInitially = import.meta.env.PROD && !saved.agents.length && !window.location.hash && projectExample.agents.length > 0;
   const [welcome, setWelcome] = useState(() => {
@@ -82,7 +82,7 @@ export default function App() {
   const agentsRef = useRef(agents);
   const showProjectExample = showProjectExampleInitially && agents.length === 0;
   const [officeError, setOfficeError] = useState(saved.error);
-  const [interactions, setInteractions] = useState<AgentInteraction[]>(() => showProjectExampleInitially ? projectExample.interactions ?? [] : []);
+  const [interactions, setInteractions] = useState<AgentInteraction[]>(() => showProjectExampleInitially ? projectExample.interactions ?? [] : saved.interactions);
   const [interactionClock, setInteractionClock] = useState(Date.now());
   const [preview, setPreview] = useState(
     () => !showProjectExampleInitially && !saved.agents.length && sessionStorage.getItem("dots-robots-connected") !== "yes",
@@ -120,12 +120,16 @@ export default function App() {
   const visibleBooks = guest?.books ?? books;
   const visibleProjects = guest?.projects ?? projects;
   const character = !guest ? CHARACTERS.find((c) => c.kind === selected) : undefined;
-  function addAgents(incoming: OfficeAgent[]) {
+  function addAgents(incoming: OfficeAgent[], incomingLinks: AgentInteraction[] = []) {
     const merged = mergeOfficeAgents(agentsRef.current, incoming);
-    try { localStorage.setItem(OFFICE_STORAGE_KEY, serializeOffice(merged)); }
+    const links = [...new Map([...interactions, ...incomingLinks].map((link) => [
+      `${link.fromId}:${link.toId}:${link.at}:${link.kind}`, link,
+    ])).values()].filter((link) => merged.some((a) => a.id === link.fromId) && merged.some((a) => a.id === link.toId)).slice(-100);
+    try { localStorage.setItem(OFFICE_STORAGE_KEY, serializeOffice(merged, links)); }
     catch { throw new Error("This browser could not save the office. Free some browser storage and try importing again."); }
     agentsRef.current = merged;
     setAgents(merged);
+    setInteractions(links);
     setOfficeError("");
     return merged;
   }
@@ -144,7 +148,7 @@ export default function App() {
   });
   const [replay, setReplay] = useState<OfficeReplay | null>(() => showProjectExampleInitially ? createOfficeReplay(projectExample.agents) : null);
   const [replayElapsed, setReplayElapsed] = useState(0);
-  const [replaySpeed, setReplaySpeed] = useState(10);
+  const [replaySpeed, setReplaySpeed] = useState(1);
   const autoStartReplay = useRef(true);
   function startOfficeReplay(source = showProjectExample ? projectExample.agents : agents) {
     setReplay(createOfficeReplay(source));
@@ -197,6 +201,21 @@ export default function App() {
   function selectBook(id: string) { setFirstAid(false); setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
   function selectProject(id: string) { setFirstAid(false); setSelected(null); setSelectedBook(null); setSelectedProject(id); }
   function leaveGuest() { window.location.hash = ""; setGuest(null); }
+  function joinGuest() {
+    if (!guest) return;
+    try {
+      const incoming = guest.agents.map((a) => ({ ...a, id: `invite:${guest.createdAt}:${a.id}` }));
+      const merged = addAgents(incoming);
+      local.disconnect();
+      autoStartReplay.current = false;
+      setPreview(false);
+      setPaused(false);
+      if (replay && !showProjectExample) setReplay(appendOfficeReplay(replay, incoming, replayElapsed));
+      else startOfficeReplay(merged);
+      leaveGuest();
+      dismissWelcome();
+    } catch (e) { setOfficeError(e instanceof Error ? e.message : "Unable to join this snapshot."); }
+  }
   const behavior = (a: OfficeAgent) => linkedPartner(a.id) ? `Working with ${linkedPartner(a.id)!.name}` : agentActivityLabel(a) ?? STATUS_LABELS[a.status];
   function watchLocal(source: string) {
     autoStartReplay.current = false;
@@ -245,6 +264,7 @@ export default function App() {
           </button>
         </nav>}
         <div className="topbar-actions">
+          {guest && <button className="import-button" onClick={joinGuest}><Users size={15} /> Join snapshot with my agents</button>}
           {!guest && <button className="studio-button" onClick={() => setStudioTab("profile")}><Palette size={15} /> Room studio</button>}
           {!guest && <button className="studio-button social-top-button" title="Import LinkedIn or X" onClick={() => setStudioTab("social")}><Globe2 size={15} /> Import social</button>}
           {!guest && <button className="import-button" onClick={() => setWelcome(true)}><ArrowDownToLine size={15} /> Import agents</button>}
@@ -254,7 +274,7 @@ export default function App() {
         <aside className={`sidebar ${guest ? "guest-sidebar" : ""}`}>
           <div className="eyebrow"><span /> {guest ? "FRIEND'S ROOM" : "A NEW WAY TO WORK"}</div>
           <h1>{guest ? guest.profile.displayName : profile.displayName === "My room" ? <>Big ideas.<br />Little coworkers<span>.</span></> : <>{profile.displayName}<span>.</span></>}</h1>
-          <p className="intro">{guest ? "A shared snapshot of this friend's agent world." : profile.interests || "Your AI team deserves more than another browser tab."}</p>
+          <p className="intro">{guest ? "Join combines these shared agents with yours in this browser. Changes are not sent to the host." : profile.interests || "Bring your Codex sessions into a little 3D office. See their activity, replay their work, and make the room yours."}</p>
           {visibleProfile.socialUrl && <a className="social-link" href={visibleProfile.socialUrl} target="_blank" rel="noreferrer">View social profile <ArrowUpRight size={12} /></a>}
           <div className="section-heading">
             {showPreview ? "MEET THE LITTLE GUYS" : guest ? "SHARED AGENTS" : "YOUR OFFICE"}
@@ -306,7 +326,7 @@ export default function App() {
                           (c) =>
                             c.kind ===
                             (a.character ??
-                              agentCharacter(a.id, a.model, a.harness)),
+                              agentCharacter(a.id)),
                         )!.color,
                       } as React.CSSProperties
                     }
@@ -420,7 +440,7 @@ export default function App() {
               <CircleHelp size={18} />
             </button>
           </div>
-          {officeError && !guest && <p className="office-error" role="alert">{officeError}</p>}
+          {officeError && <p className="office-error" role="alert">{officeError}</p>}
           <OfficeWorld
             agents={roomAgents}
             interactions={activeLinks}
@@ -456,8 +476,8 @@ export default function App() {
           )}
           {!guest && !showPreview && replay && (
             <div className="replay-banner" role="status">
-              <b>{showProjectExample ? "Real project session example" : "Parallel session replay"}</b>
-              {showProjectExample && <span>{projectExample.agents.length} local Codex recordings · task titles, models, timestamps, and coarse activity labels</span>}
+              <b>{showProjectExample ? "Recorded project sessions" : "Parallel session replay"}</b>
+              {showProjectExample && <span>{projectExample.agents.length} real sessions · recorded activity</span>}
               <span className="replay-clock">
                 T+{replayClockLabel(replayElapsed)} · aligned task starts
               </span>
@@ -477,7 +497,7 @@ export default function App() {
                 Restart all sessions
               </button>
               <button onClick={() => setReplay(null)}>
-                Return to current state
+                Show latest snapshot
               </button>
             </div>
           )}
@@ -680,13 +700,13 @@ export default function App() {
       </footer>
       {!guest && studioTab && <RoomStudio key={studioTab} initialTab={studioTab} profile={profile} onProfile={setProfile} books={books} onBooks={setBooks} projects={projects} onProjects={setProjects} stats={stats} onStats={setStats} share={share} onShare={setShare} agents={visibleAgents} onClose={() => setStudioTab(null)} />}
       {welcome && !guest && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onSocialImport={() => { dismissWelcome(); setStudioTab("social"); }} onImport={(imported, importedLinks) => {
-        const merged = addAgents(imported);
-        setInteractions(importedLinks ?? []);
+        const merged = addAgents(imported, importedLinks);
         setInteractionClock(Date.now());
         local.disconnect();
         autoStartReplay.current = false;
         setPreview(false);
-        if (replay) setReplay(appendOfficeReplay(replay, imported, replayElapsed));
+        setPaused(false);
+        if (replay && !showProjectExample) setReplay(appendOfficeReplay(replay, imported, replayElapsed));
         else startOfficeReplay(merged);
         dismissWelcome();
       }} />}

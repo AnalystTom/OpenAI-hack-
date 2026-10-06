@@ -30,10 +30,16 @@ export function agentActivityLabel(agent: OfficeAgent): string | undefined {
   const label = task.replace(/^(Review|Audit|Write|Check|Fix|Plan|Design|Add)\b/, (verb) => verbs[verb]);
   return label.length > 42 ? `${label.slice(0, 39).trimEnd()}…` : label;
 }
+/** Skip only the recorded lead-in; keep every event after work begins. */
+function recordingStart(agent: OfficeAgent) {
+  const history = agent.history;
+  const first = history?.find((event) => event.status === "working") ?? history?.[0];
+  return first ? Date.parse(first.at) : 0;
+}
 export function createOfficeReplay(agents: OfficeAgent[]): OfficeReplay | null {
   const durations = agents.map((a) =>
     a.history && a.history.length > 1
-      ? Date.parse(a.history.at(-1)!.at) - Date.parse(a.history[0].at)
+      ? Date.parse(a.history.at(-1)!.at) - recordingStart(a)
       : 0,
   );
   const durationMs = Math.max(0, ...durations);
@@ -57,7 +63,7 @@ export function replayOffice(
         contextUsed: null,
         contextWindow: null,
       };
-    const start = Date.parse(history[0].at);
+    const start = recordingStart(agent);
     const end = Date.parse(history.at(-1)!.at);
     const elapsed = Math.max(0, elapsedMs - (replay.startedAt?.[agent.id] ?? 0));
     const at = start + elapsed;

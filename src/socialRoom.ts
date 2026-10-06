@@ -107,7 +107,7 @@ export function createGuestRoom(input: {
       interests: input.share.profileLink ? input.profile.interests : "",
     },
     agents: input.share.agents
-      ? input.agents.slice(0, 12).map((agent, index) => ({
+      ? input.agents.slice(0, 50).map((agent, index) => ({
           id: `shared-${index}`,
           name: agent.name,
           harness: agent.harness,
@@ -126,7 +126,7 @@ export function createGuestRoom(input: {
       totalTokens: Number.isFinite(input.stats.totalTokens) && input.stats.totalTokens! >= 0 ? input.stats.totalTokens : null,
       totalSpend: Number.isFinite(input.stats.totalSpend) && input.stats.totalSpend! >= 0 ? input.stats.totalSpend : null,
       currency: "USD",
-      agentTotals: input.share.agents ? Object.fromEntries(input.agents.slice(0, 12).map((agent, index) => {
+      agentTotals: input.share.agents ? Object.fromEntries(input.agents.slice(0, 50).map((agent, index) => {
         const totals = input.stats.agentTotals?.[agent.id];
         return [`shared-${index}`, {
           totalTokens: typeof totals?.totalTokens === "number" && Number.isFinite(totals.totalTokens) && totals.totalTokens >= 0 ? totals.totalTokens : null,
@@ -139,7 +139,7 @@ export function createGuestRoom(input: {
 
 function encodeRoom(room: GuestRoom): string {
   const bytes = new TextEncoder().encode(JSON.stringify(room));
-  if (bytes.length > 9000) throw new Error("This room is too large for an invitation link. Share fewer items.");
+  if (bytes.length > 32000) throw new Error("This room is too large for an invitation link. Share fewer items.");
   return btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
@@ -151,7 +151,7 @@ export function invitationUrl(room: GuestRoom, currentUrl: string): string {
 
 export function readGuestRoom(hash: string): GuestRoom | null {
   const encoded = hash.startsWith("#room=") ? hash.slice(6) : "";
-  if (!encoded || encoded.length > 12000 || !/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
+  if (!encoded || encoded.length > 43000 || !/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
   try {
     const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/");
     const binary = atob(base64);
@@ -159,7 +159,7 @@ export function readGuestRoom(hash: string): GuestRoom | null {
     const value = JSON.parse(new TextDecoder().decode(bytes)) as GuestRoom;
     if (value?.version !== 1 || !value.profile || !Array.isArray(value.agents) ||
         !Array.isArray(value.books) || !Array.isArray(value.projects)) return null;
-    if (value.agents.length > 12 || value.books.length > 8 || value.projects.length > 8) return null;
+    if (value.agents.length > 50 || value.books.length > 8 || value.projects.length > 8) return null;
     const theme: RoomTheme = ["studio", "grove", "coastal", "cosmic"].includes(value.profile.theme) ? value.profile.theme : "studio";
     const statuses = ["working", "idle", "blocked", "error", "offline", "unknown"];
     const characters = ["blue-dot", "frog-dot", "yellow-dot", "pink-dot", "purple-dot", "lovable"];

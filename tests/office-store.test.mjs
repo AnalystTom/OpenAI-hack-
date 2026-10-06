@@ -33,3 +33,10 @@ test("joining a replay preserves old clocks and starts the new agent at arrival"
   assert.equal(replay.agents.length, 2);
   assert.deepEqual(replayOffice(replay, 90000).map(a => a.status), ["idle", "idle"]);
 });
+
+test("recorded session links survive saving and refresh", () => {
+  const agents = [recorded("a"), recorded("b")];
+  const links = [{ fromId: "a", toId: "b", at: agents[0].updatedAt, kind: "delegation" }];
+  const restored = readSavedOffice({ getItem: () => serializeOffice(agents, links) });
+  assert.deepEqual(restored.interactions, links);
+});

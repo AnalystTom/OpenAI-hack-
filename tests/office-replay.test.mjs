@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   createOfficeReplay,
+  appendOfficeReplay,
   replayOffice,
   officeSummary,
 } from "../src/officeReplay.ts";
@@ -61,4 +62,26 @@ test("no recording means unknown rather than a fabricated task", () => {
   assert.equal(view[0].contextUsed, null);
   assert.match(officeSummary(view, true), /1 agent is working/);
   assert.match(officeSummary(view, true), /Replay/);
+});
+
+test("imports skip recorded idle lead-ins and new arrivals start work on their own clock", () => {
+  const start = Date.UTC(2026, 9, 6);
+  const resident = agent("resident", start, 30000);
+  const arrival = agent("arrival", start, 60000);
+  arrival.history.unshift({ at: new Date(start - 120000).toISOString(), status: "idle", label: "Waiting for a task" });
+  const originalHistory = structuredClone(arrival.history);
+  const initial = createOfficeReplay([resident, arrival]);
+  assert.equal(initial.durationMs, 60000);
+  assert.deepEqual(replayOffice(initial, 0).map(a => a.status), ["working", "working"]);
+  const joined = appendOfficeReplay(createOfficeReplay([resident]), [arrival], 30000);
+  assert.equal(joined.durationMs, 90000);
+  assert.deepEqual(replayOffice(joined, 30000).map(a => a.status), ["idle", "working"]);
+  assert.equal(replayOffice(joined, 90000)[1].status, "idle");
+  assert.deepEqual(arrival.history, originalHistory, "source timestamps remain intact");
+});
+
+test("idle-only recordings are not turned into work", () => {
+  const resting = agent("resting", Date.UTC(2026, 9, 6), 30000);
+  resting.history[0].status = "idle";
+  assert.equal(replayOffice(createOfficeReplay([resting]), 0)[0].status, "idle");
 });

@@ -31,8 +31,9 @@ export function serializeOffice(agents: OfficeAgent[], interactions?: AgentInter
 export function readSavedOffice(storage: Pick<Storage, "getItem">) {
   try {
     const text = storage.getItem(OFFICE_STORAGE_KEY);
-    return { agents: text ? parseOfficeSnapshot(text).agents : [], error: "" };
+    const snapshot = text ? parseOfficeSnapshot(text) : null;
+    return { agents: snapshot?.agents ?? [], interactions: snapshot?.interactions ?? [], error: "" };
   } catch {
-    return { agents: [], error: "Your saved office could not be read. It has not been overwritten; you can re-import a snapshot." };
+    return { agents: [], interactions: [], error: "Your saved office could not be read. It has not been overwritten; you can re-import a snapshot." };
   }
 }

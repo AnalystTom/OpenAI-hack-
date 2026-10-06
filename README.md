@@ -40,12 +40,18 @@ The **Invite** tab creates a read-only snapshot link. The owner chooses whether 
 
 ## Local Codex session feed
 
-Choose **Watch local Codex sessions → Current workspace**. The local dev server reads up to six recent, non-archived sessions for the nearest Codex workspace containing this checkout. Set `DOTS_SESSION_CWD` to a specific session working directory if automatic selection is wrong. It refreshes every five seconds using the local Codex SQLite index and bounded tails of each session event log. Credentials, message bodies, and tool arguments/output are never returned. Live session data stays local. The production build includes a small, sanitized replay of actual project sessions from `src/data/project-example.json`, clearly labelled as a recorded example.
+Choose **Watch local Codex sessions → Current workspace**. The local dev server reads up to 50 recent, non-archived sessions for the nearest Codex workspace containing this checkout. Set `DOTS_SESSION_CWD` to a specific session working directory if automatic selection is wrong. It refreshes every five seconds using the local Codex SQLite index and bounded tails of each session event log. Credentials, message bodies, and tool arguments/output are never returned. Live session data stays local. The production build includes a small, sanitized replay of actual project sessions from `src/data/project-example.json`, clearly labelled as a recorded example.
 
 - Recorded running work sends the character to a desk with a seated typing animation.
-- A completed/interrupted turn becomes idle and the character rests in the lounge.
+- A completed/interrupted turn becomes idle and the character walks the central carpet between the desk rows.
 - Missing, unreadable, or stale running state is unknown; connection loss stops work animation.
 - **Parallel session replay** starts every imported session's recorded task at T+0. A shared clock preserves event spacing and task durations, with 1×, 10× and 60× playback, pause and restart controls. It does not execute or restart actual tasks.
 - A recent recorded parent/child delegation or session message call links two currently working characters in a short playful team-up. The room shows the link type and both names, never the message. A link fades after 90 seconds or when either session stops working. Other concurrent work remains at its desk. Imported version 1 snapshots may also include an optional `interactions` array with `fromId`, `toId`, `at`, and `kind` (`delegation` or `message`).
 
 This reader runs only on the loopback development server. The public site's remote pairing/upload flow is still owned by workstream 2. `server/codex-sessions.mjs` returns the shared `OfficeSnapshot` contract with optional recorded history and session links. Messages sent through tools that do not expose a structured destination in the rollout are not detected, so the room does not infer a link from coincident activity.
+
+## Joining agents and desk capacity
+
+Imports keep existing residents, update matching session IDs, and preserve recorded interaction links across refreshes. The room starts with 12 desks and expands its floor, furniture, and camera framing to give up to 50 imported agents distinct seats. Character previews do not occupy imported agents' seats.
+
+Friends can opt into sharing up to 50 agents through **Room studio → Invite**. A visitor can choose **Join snapshot with my agents** to combine that invitation with their existing imports, then use **Import agents** to add their Codex export. This creates a combined room in the visitor's browser. The invitation is still a snapshot: joining does not send data to the owner, synchronize browsers, execute tasks, or establish a live Codex connection. The public website supports JSON file imports; automatic uploads remain local development only.

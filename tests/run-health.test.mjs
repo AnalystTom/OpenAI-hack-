@@ -50,12 +50,12 @@ test("context pressure uses the latest reported input, not total usage", () => {
   assert.equal(parse(start, tokens, start).contextUsed, null);
 });
 
-test("retry pose follows a small circle and offline agents stay still", () => {
-  const a = officePose("working", 0, 0, 1, true), b = officePose("working", 0, Math.PI / 1.4, 1, true);
+test("retrying and offline agents follow the central carpet circuit", () => {
+  const a = officePose("working", 0, 0, 6, true), b = officePose("working", 3, 0, 6, true);
   assert.equal(a.walking, true); assert.equal(a.sitting, false);
-  assert.ok(Math.abs(Math.abs(a.x - b.x) - 1.3) < 1e-8);
-  assert.equal(officePose("offline", 0, 0, 1, true).walking, false);
-  assert.equal(officePose("working", 0, 0, 1, false).sitting, true);
+  assert.ok(Math.abs(a.x - b.x) > 20);
+  assert.equal(officePose("offline", 0, 0, 6, true).walking, true);
+  assert.equal(officePose("working", 0, 0, 6, false).sitting, true);
 });
 
 test("health metadata is optional and imported counts are validated", () => {

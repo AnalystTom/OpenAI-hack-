@@ -55,3 +55,11 @@ test("invalid or hostile guest payloads are rejected or sanitized", () => {
   assert.equal(room.stats.totalTokens, null);
   assert.equal(room.stats.totalSpend, null);
 });
+
+test("invitations retain all 50 shared agents without silent truncation", () => {
+  const agents = Array.from({ length: 50 }, (_, i) => ({ ...agent, id: `source-${i}`, name: `Session ${i}` }));
+  const room = createGuestRoom({ ...input, agents, share: { ...DEFAULT_SHARE, agents: true } });
+  const guest = readGuestRoom(new URL(invitationUrl(room, "https://dots.example/")).hash);
+  assert.equal(guest.agents.length, 50);
+  assert.equal(guest.agents.at(-1).name, "Session 49");
+});

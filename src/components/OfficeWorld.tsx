@@ -65,7 +65,7 @@ export const CHARACTERS: {
   },
 ];
 import {
-  DESKS,
+  officeLayout,
   CHAIR_PLACEMENT,
   STATUS_LABELS,
   agentCharacter,
@@ -133,7 +133,7 @@ function Label({
     </mesh>
   );
 }
-function Furniture() {
+function Furniture({ total }: { total: number }) {
   const items = useMemo(() => {
     const result: FurnitureItem[] = [];
     const add = (type: string, x: number, z: number, facing = 0) =>
@@ -144,7 +144,7 @@ function Furniture() {
         y: (z + 16.2) / 0.018,
         facing,
       });
-    for (const { x, z } of DESKS) {
+    for (const { x, z } of officeLayout(total).desks) {
       add("desk_cubicle", x, z);
       add("computer", x + 0.55, z - 0.25);
       add(
@@ -170,7 +170,7 @@ function Furniture() {
       add("plant", x, z);
     add("lamp", 7.9, 4.4);
     return result;
-  }, []);
+  }, [total]);
   return (
     <group scale={[1.15, 1.15, 1.15]}>
       {[...new Set(items.map((i) => i.type))].map((type) => (
@@ -219,43 +219,44 @@ function FirstAidKit({ onOpen }: { onOpen: () => void }) {
     <Billboard position={[0, 2, 0]}><Label text="FIRST AID" position={[0, 0, 0]} width={1.9} height={.4} /></Billboard>
   </group>;
 }
-function Room({ night, profile }: { night: boolean; profile: RoomProfile }) {
+function Room({ night, profile, total }: { night: boolean; profile: RoomProfile; total: number }) {
+  const layout = officeLayout(total);
   const palette = PALETTES[profile.theme];
   return (
     <>
       <Box
-        position={[0, -0.32, 0]}
-        size={[21, 0.6, 16]}
+        position={[layout.x, -0.32, layout.z]}
+        size={[layout.width, 0.6, layout.depth]}
         color={night ? "#3e4548" : palette.lounge}
       />
       <Box
-        position={[0, 0.015, 0]}
-        size={[20.7, 0.06, 15.7]}
+        position={[layout.x, 0.015, layout.z]}
+        size={[layout.width - 0.3, 0.06, layout.depth - 0.3]}
         color={night ? "#67746c" : palette.floor}
       />
-      {Array.from({ length: 20 }, (_, i) => (
+      {Array.from({ length: Math.floor(layout.width) }, (_, i) => (
         <mesh
           key={i}
           rotation={[-Math.PI / 2, 0, 0]}
-          position={[-9.8 + i, 0.052, 0]}
+          position={[layout.x - layout.width / 2 + 0.7 + i, 0.052, layout.z]}
         >
-          <planeGeometry args={[0.016, 15.5]} />
+          <planeGeometry args={[0.016, layout.depth - 0.5]} />
           <meshStandardMaterial color={night ? "#667369" : palette.wall} />
         </mesh>
       ))}
       <Box
-        position={[0, 1.35, -7.9]}
-        size={[21, 2.7, 0.22]}
+        position={[layout.x, 1.35, -7.9]}
+        size={[layout.width, 2.7, 0.22]}
         color={night ? "#4c5954" : palette.wall}
       />
       <Box
-        position={[-10.4, 1.35, 0]}
-        size={[0.22, 2.7, 16]}
+        position={[layout.x - layout.width / 2 + 0.1, 1.35, layout.z]}
+        size={[0.22, 2.7, layout.depth]}
         color={night ? "#44504c" : palette.wall}
       />
       <Box
-        position={[-2.5, 0.07, -0.05]}
-        size={[12, 0.05, 3.7]}
+        position={[layout.carpet.x, 0.07, layout.carpet.z]}
+        size={[layout.carpet.width, 0.05, layout.carpet.depth]}
         color={night ? "#547366" : palette.rug}
       />
       <Box
@@ -290,7 +291,7 @@ function Room({ night, profile }: { night: boolean; profile: RoomProfile }) {
       <Label
         text="MAKE ROOM FOR IDEAS"
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[-2.4, 0.12, -0.1]}
+        position={[layout.carpet.x, 0.12, layout.carpet.z]}
         width={5.5}
         height={0.7}
         bg={palette.rug}
@@ -306,7 +307,7 @@ function Room({ night, profile }: { night: boolean; profile: RoomProfile }) {
       {profile.theme === "cosmic" && Array.from({ length: 12 }, (_, index) => <mesh key={index} position={[-8.7 + (index % 6) * 3.2, 1.8 + (index % 2) * 0.38, -7.72]}><sphereGeometry args={[0.055, 8, 8]} /><meshBasicMaterial color="#fcf5c9" /></mesh>)}
       <Label text="WORK STATIONS" rotation={[-Math.PI / 2, 0, 0]} position={[-2.5, 0.12, -1.75]} width={3.1} height={0.42} bg={night ? "#547366" : palette.rug} color="#f7f8ef" />
       <Label text="COFFEE BREAK" rotation={[-Math.PI / 2, 0, 0]} position={[5.7, 0.12, -1.7]} width={2.7} height={0.42} bg={night ? "#806955" : palette.lounge} color="#fffaf0" />
-      <Furniture />
+      <Furniture total={total} />
     </>
   );
 }
@@ -389,6 +390,13 @@ function TeamUp({ slot, accent, paused, reducedMotion }: { slot: number; accent:
     <Billboard position={[0, 2.85, 0]}><Label text="TEAM UP" position={[0, 0, 0]} width={1.65} height={0.38} bg={accent} color="#fffdf2" fontSize={75} /></Billboard>
   </group>;
 }
+// Keep late imports on the same circuit as the residents already in the room.
+function OfficeAnimationClock({ paused, time }: { paused: boolean; time: { current: number } }) {
+  useFrame((_, dt) => {
+    if (!paused) time.current += Math.min(dt, 0.1);
+  }, -1);
+  return null;
+}
 function Walker({
   id,
   kind,
@@ -405,6 +413,7 @@ function Walker({
   hitAt,
   onHit,
   retrying = false,
+  animationTime,
   agent,
   reducedMotion,
   interaction,
@@ -424,15 +433,15 @@ function Walker({
   hitAt?: number;
   onHit: () => void;
   retrying?: boolean;
+  animationTime: { current: number };
   agent?: OfficeAgent;
   reducedMotion: boolean;
   interaction?: { slot: number; side: "from" | "to" };
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
-  const elapsed = useRef(0);
   const visual = useRef<THREE.Group>(null);
-  const initialPose = useRef(officePose(status, index, 0, total));
+  const initialPose = useRef(officePose(status, index, animationTime.current, total));
   useEffect(() => {
     const instance = createMascotCharacter(kind);
     mascot.current = instance;
@@ -444,8 +453,7 @@ function Walker({
     };
   }, [kind]);
   useFrame((_, dt) => {
-    if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const pose = officePose(hitAt === undefined ? status : "working", index, reducedMotion ? 0 : elapsed.current, total, hitAt === undefined && retrying, hitAt === undefined ? interaction : undefined);
+    const pose = officePose(hitAt === undefined ? status : "working", index, reducedMotion ? 0 : animationTime.current, total, hitAt === undefined && retrying, hitAt === undefined ? interaction : undefined);
     if (visual.current) {
       const impact = hitAt === undefined || reducedMotion ? 0 : Math.max(0, 1 - (performance.now() - hitAt) / 400);
       visual.current.scale.set(1 + impact * 0.18, 1 - impact * 0.2, 1 + impact * 0.18);
@@ -458,7 +466,7 @@ function Walker({
       else parent.current.position.lerp(target, 1 - Math.exp(-dt * 5));
       parent.current.rotation.y = pose.facing;
       mascot.current?.update(
-        reducedMotion ? 0 : elapsed.current,
+        reducedMotion ? 0 : animationTime.current,
         paused || reducedMotion ? 0 : pose.walking || moving ? 1 : 0,
         pose.sitting && (!moving || reducedMotion),
       );
@@ -503,8 +511,7 @@ function Walker({
       )}
       {agent ? <Billboard>
         <ContextMeter agent={agent} />
-        <Label text={agent.name.length > 26 ? `${agent.name.slice(0, 23)}…` : agent.name} subtitle={statusText ?? STATUS_LABELS[agent.status]} position={[0, 2.95, 0]} width={4.2} height={1.15} bg={STATUS_COLOR[agent.status]} color="#233026" />
-        <Label text={`${agent.harness} / ${agent.model ?? "Model not reported"} · ${agent.contextUsed !== null && agent.contextWindow !== null ? `${Math.round((agent.contextUsed / agent.contextWindow) * 100)}% ctx` : "Context not reported"}`} position={[0, 2.17, 0]} width={3.1} height={0.28} bg="#eef1e9" color="#47564b" fontSize={59} />
+        <Label text={agent.name.length > 26 ? `${agent.name.slice(0, 23)}…` : agent.name} subtitle={statusText ?? STATUS_LABELS[agent.status]} position={[0, 2.85, 0]} width={3.1} height={0.88} bg={STATUS_COLOR[agent.status]} color="#233026" />
       </Billboard> : label && (
         <Billboard position={[0, 2.35, 0]}>
           <Label
@@ -521,18 +528,20 @@ function Walker({
     </group>
   );
 }
-function CameraReset({ resetKey }: { resetKey: number }) {
+function CameraReset({ resetKey, total }: { resetKey: number; total: number }) {
   const { camera, controls, invalidate } = useThree();
   useEffect(() => {
-    camera.position.set(18, 17, 20);
+    const layout = officeLayout(total);
+    const zoom = Math.max(layout.width / 21, layout.depth / 16);
+    camera.position.set(layout.x + 18 * zoom, 17 * zoom, layout.z + 20 * zoom);
     const orbit = controls as unknown as {
       target: THREE.Vector3;
       update: () => void;
     } | null;
-    orbit?.target.set(0, 0.2, 0);
+    orbit?.target.set(layout.x, 0.2, layout.z);
     orbit?.update();
     invalidate();
-  }, [resetKey, camera, controls, invalidate]);
+  }, [resetKey, total, camera, controls, invalidate]);
   return null;
 }
 export default function OfficeWorld({
@@ -575,6 +584,7 @@ export default function OfficeWorld({
   onFirstAid?: () => void;
 }) {
   const [fireworkStartedAt, setFireworkStartedAt] = useState<number | null>(null);
+  const animationTime = useRef(0);
   const [hammerHeld, setHammerHeld] = useState(false);
   const [swingAt, setSwingAt] = useState(0);
   const [hammerHits, setHammerHits] = useState<Record<string, number>>({});
@@ -587,7 +597,7 @@ export default function OfficeWorld({
     setHammerHits((hits) => ({ ...hits, [id]: at }));
     setLastHit(name);
   }
-  const hasAgents = CHARACTERS.length > 0 || agents.length > 0;
+  const hasAgents = preview || agents.length > 0;
   useEffect(() => {
     if (fireworkStartedAt === null) return;
     const timer = setTimeout(() => setFireworkStartedAt(null), FIREWORK_DURATION * 1000);
@@ -614,9 +624,10 @@ export default function OfficeWorld({
       dpr={[1, 1.7]}
       camera={{ position: [18, 17, 20], fov: 38 }}
       onCreated={onReady}
-      aria-label="Interactive 3D office"
+      aria-label={`Interactive 3D office · ${officeLayout(agents.length).desks.length} desks`}
       style={{ cursor: hammerHeld ? "none" : "auto" }}
     >
+      <OfficeAnimationClock paused={paused} time={animationTime} />
       <color attach="background" args={[night ? "#252e32" : palette.backdrop]} />
       <ambientLight intensity={night ? 0.8 : 1.6} />
       <hemisphereLight args={["#fff8e9", "#748575", 1.6]} />
@@ -632,7 +643,7 @@ export default function OfficeWorld({
         shadow-bias={-0.001}
       />
       <Suspense fallback={null}>
-        <Room night={night} profile={profile} />
+        <Room night={night} profile={profile} total={agents.length} />
         {onFirstAid && <FirstAidKit onOpen={onFirstAid} />}
       </Suspense>
       <KnowledgeDisplay books={books} selected={selectedBook} onSelect={onSelectBook} accent={palette.accent} />
@@ -668,15 +679,15 @@ export default function OfficeWorld({
           <Label text="TIBO" subtitle="Hit reset. Make sparks." position={[0, 0, 0]} width={3.7} height={0.9} bg="#fff6e7" color="#524b3c" />
         </Billboard>
       </group>
-      {[...CHARACTERS.map((c) => ({
+      {[...(preview ? CHARACTERS.map((c) => ({
             id: c.kind,
             kind: c.kind,
             label: undefined,
             status: "preview" as const,
-          })),
-        ...agents.map((a) => ({
+          })) : []),
+        ...(!preview ? agents.map((a) => ({
             id: a.id,
-            kind: a.character ?? agentCharacter(a.id, a.model, a.harness),
+            kind: a.character ?? agentCharacter(a.id),
             label: a.name,
             status: a.status,
             statusText: agentActivityLabel(a),
@@ -686,13 +697,14 @@ export default function OfficeWorld({
               const link = interactions.find((item) => item.fromId === a.id || item.toId === a.id);
               return link ? { slot: link.slot, side: link.fromId === a.id ? "from" as const : "to" as const } : undefined;
             })(),
-          }))
+          })) : [])
       ].map((a, i, array) => (
         <Walker
           key={a.id}
           {...a}
           index={i}
           total={array.length}
+          animationTime={animationTime}
           paused={paused}
           fireworkStartedAt={fireworkStartedAt}
           hammerHeld={hammerHeld}
@@ -706,19 +718,19 @@ export default function OfficeWorld({
       <ContactShadows
         position={[0, -0.66, 0]}
         opacity={0.3}
-        scale={45}
+        scale={120}
         blur={2.6}
         far={10}
         resolution={512}
         frames={1}
       />
-      <CameraReset resetKey={cameraKey} />
+      <CameraReset resetKey={cameraKey} total={agents.length} />
       <OrbitControls
         makeDefault
         enabled={!hammerHeld}
         target={[0, 0.2, 0]}
         minDistance={13}
-        maxDistance={52}
+        maxDistance={160}
         maxPolarAngle={Math.PI / 2.25}
         minPolarAngle={0.2}
         enableDamping

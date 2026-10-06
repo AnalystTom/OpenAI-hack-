@@ -65,3 +65,21 @@ Final review includes the combined rooms, live links, recorded production exampl
 Validation: production build and 34 tests; fresh Playwright context verified fireworks above visible models, toy hammer pickup/drop, local workspace import with real run health, replay/pause, saved residents after reload, empty collections, default-off sharing, read-only guest entry, mobile overflow, and the production recorded-example entry. Review browser remains open.
 
 Import-button alignment follow-up: one scoped selector corrects the single-icon case. Lean already. Ship. Playwright verified the import dialog at mobile width without overflow.
+
+## Session joining and desk capacity review
+
+1. scripts/verify-session-room.mjs: delete: unused context registry and redundant hidden-input visibility branch. Browser.close owns context cleanup; check the import dialog directly. Addressed.
+
+net: -4 lines applied.
+
+Follow-up review: Lean already. Ship.
+
+Uses the existing snapshot importer, storage serializer, room invitations, instanced furniture, and camera reset. No dependency or transport was added. Invitations and imports support 50 agents; fresh-browser verification uses supplied real source metadata rather than product fixtures.
+
+## Final carpet demo review
+
+1. src/officeBehavior.ts: delete: unused model and harness appearance parameters. Session ID alone selects a stable character. Addressed.
+
+net: -4 lines applied.
+
+Follow-up review: Lean already. Ship. The carpet renderer and walk path share officeLayout bounds; the existing shared animation clock keeps new arrivals synchronized. Verified source statuses remain unchanged.

@@ -185,7 +185,7 @@ export async function readRobotsSessions({
       .get(...args).count;
     rows = database
       .prepare(
-        `SELECT id,name,title,model,agent_path,created_at,updated_at,rollout_path FROM threads WHERE ${filters} ORDER BY updated_at DESC LIMIT 6`,
+        `SELECT id,name,title,model,agent_path,created_at,updated_at,rollout_path FROM threads WHERE ${filters} ORDER BY updated_at DESC LIMIT 50`,
       )
       .all(...args);
     if (rows.length > 1) {
