@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Copy, FileUp, Play, RefreshCw, X } from "lucide-react";
+import { ArrowRight, Check, Copy, FileUp, Globe2, Play, RefreshCw, X } from "lucide-react";
 import type { AgentInteraction, OfficeAgent, OfficeSnapshot } from "../../types";
 import { parseOfficeSnapshot } from "../../snapshot";
 import { importPrompt, type ImportPairing } from "../../integrations/codex/importPrompt";
 import "./welcome.css";
 
-export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
+export default function Welcome({ onImport, onExplore, onSocialImport, existingCount = 0 }: {
   onImport: (agents: OfficeAgent[], interactions?: AgentInteraction[]) => void;
   onExplore: () => void;
+  onSocialImport: () => void;
   existingCount?: number;
 }) {
   const [project, setProject] = useState("");
@@ -153,6 +154,7 @@ export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
             } catch (e) { setError(e instanceof Error ? e.message : "Unable to read snapshot."); }
           }} />
           {error && <p className="welcome-error" role="alert">{error}</p>}
+          <button className="welcome-action" onClick={onSocialImport}><Globe2 size={16} /> Personalize with LinkedIn or X <ArrowRight size={16} /></button>
           <button className="welcome-action welcome-skip" onClick={onExplore}>Explore the office <ArrowRight size={16} /></button>
         </section>
     </dialog>
