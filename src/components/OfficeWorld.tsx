@@ -206,6 +206,19 @@ function Box({
     </RoundedBox>
   );
 }
+function FirstAidKit({ onOpen }: { onOpen: () => void }) {
+  return <group position={[-10.05, .4, -3.5]} rotation={[0, Math.PI / 2, 0]} onClick={(e) => { e.stopPropagation(); onOpen(); }}
+    onPointerOver={() => { document.body.style.cursor = "pointer"; }}
+    onPointerOut={() => { document.body.style.cursor = "auto"; }}>
+    <Box position={[0, 1.05, 0]} size={[1.6, .9, .65]} color="#52765a" />
+    <Box position={[0, 1.58, 0]} size={[.65, .13, .18]} color="#3c5540" />
+    <Box position={[-.29, 1.48, 0]} size={[.1, .25, .18]} color="#3c5540" />
+    <Box position={[.29, 1.48, 0]} size={[.1, .25, .18]} color="#3c5540" />
+    <Box position={[0, 1.05, .34]} size={[.18, .55, .04]} color="#f5f3e7" />
+    <Box position={[0, 1.05, .37]} size={[.55, .18, .04]} color="#f5f3e7" />
+    <Billboard position={[0, 2, 0]}><Label text="FIRST AID" position={[0, 0, 0]} width={1.9} height={.4} /></Billboard>
+  </group>;
+}
 function Room({ night, profile }: { night: boolean; profile: RoomProfile }) {
   const palette = PALETTES[profile.theme];
   return (
@@ -540,6 +553,7 @@ export default function OfficeWorld({
   onSelectProject,
   onInvite,
   onReady,
+  onFirstAid,
 }: {
   agents: OfficeAgent[];
   interactions: LiveInteraction[];
@@ -558,6 +572,7 @@ export default function OfficeWorld({
   onSelectProject: (id: string) => void;
   onInvite?: () => void;
   onReady: () => void;
+  onFirstAid?: () => void;
 }) {
   const [fireworkStartedAt, setFireworkStartedAt] = useState<number | null>(null);
   const [hammerHeld, setHammerHeld] = useState(false);
@@ -618,6 +633,7 @@ export default function OfficeWorld({
       />
       <Suspense fallback={null}>
         <Room night={night} profile={profile} />
+        {onFirstAid && <FirstAidKit onOpen={onFirstAid} />}
       </Suspense>
       <KnowledgeDisplay books={books} selected={selectedBook} onSelect={onSelectBook} accent={palette.accent} />
       <ProjectWall projects={projects} selected={selectedProject} onSelect={onSelectProject} accent={palette.accent} />
