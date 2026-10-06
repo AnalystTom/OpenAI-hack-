@@ -32,7 +32,7 @@ Office code and assets are adapted from [Claw3D](https://github.com/iamlukethede
 
 ## Personalized rooms and invitations
 
-Open **Room studio** to add a public social profile URL, a room name, and interests. The URL is a visual seed; the app does not fetch or scrape the profile. Interests can suggest a coastal, garden, studio, or night-lab palette, and the owner can choose the palette directly.
+Use **Personalize with LinkedIn or X** in the first-run Codex dialog, **Import social** in the top bar, or **Social import** in Room studio to choose LinkedIn or X. Enter a profile URL and supply a bio/headline or selected export files. LinkedIn accepts `Profile.csv`, `Skills.csv`, `Positions.csv`, and `Projects.csv`; X accepts `account.js`, `profile.js`, and `tweets.js` (or their JSON equivalents). The importer previews the name, topics, and suggested room palette before you apply it. The URL identifies the profile but cannot supply bio data on its own: this app does not fetch or scrape LinkedIn/X pages or connect to their APIs. Export files are parsed in the browser; only the derived room profile is saved locally, and X post text is used only to find topic hashtags. You can change or remove an imported look in **Room studio → Look**. This social import is separate from **Import agents**, which connects Codex sessions.
 
 The **Books** tab stores owner-written summaries of actual learning, optionally linked to a local agent session. Books appear as clickable objects in the room; opening them advances the local exploration counter. The **Projects** tab pins real projects to clickable wall posters. These room edits are stored in the current browser's local storage. No learning summary or project is inferred from a task title.
 
