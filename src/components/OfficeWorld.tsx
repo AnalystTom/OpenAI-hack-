@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Billboard, ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
@@ -9,6 +9,7 @@ import {
   type MascotCharacter,
 } from "./office/characters/createMascotCharacter";
 import type { AgentStatus, CharacterKind, OfficeAgent } from "../types";
+import type { KnowledgeBook, RoomProfile, RoomProject, RoomTheme } from "../socialRoom";
 
 export const CHARACTERS: {
   kind: CharacterKind;
@@ -55,6 +56,16 @@ export const CHARACTERS: {
 ];
 import { DESKS, agentCharacter, officePose } from "../officeBehavior";
 const noop = () => {};
+const PALETTES: Record<RoomTheme, { backdrop: string; floor: string; wall: string; rug: string; lounge: string; window: string; accent: string }> = {
+  studio: { backdrop: "#e9ebe5", floor: "#d7dccc", wall: "#eeeae0", rug: "#94ad90", lounge: "#d2b997", window: "#d9e8e4", accent: "#7f9c77" },
+  grove: { backdrop: "#dce9da", floor: "#c8ddc3", wall: "#e3ebdb", rug: "#75a88b", lounge: "#c7ad8e", window: "#c3e7d0", accent: "#4f9878" },
+  coastal: { backdrop: "#dcebed", floor: "#d2e1df", wall: "#e9f1ee", rug: "#83b7c2", lounge: "#e2c49d", window: "#b9e0ed", accent: "#57a9bd" },
+  cosmic: { backdrop: "#dedbe9", floor: "#d9d5e7", wall: "#eeeaf2", rug: "#978bc2", lounge: "#c2adc5", window: "#c6bee9", accent: "#8272bb" },
+};
+const STATUS_COLOR: Record<AgentStatus, string> = {
+  working: "#55b67a", idle: "#d9aa56", blocked: "#e49352",
+  error: "#d96b6b", offline: "#909b9c", unknown: "#9a96b1",
+};
 function Label({
   text,
   position,
@@ -63,6 +74,7 @@ function Label({
   height = 0.65,
   bg = "#edf0db",
   color = "#526447",
+  fontSize = 36,
 }: {
   text: string;
   position: [number, number, number];
@@ -71,6 +83,7 @@ function Label({
   height?: number;
   bg?: string;
   color?: string;
+  fontSize?: number;
 }) {
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
@@ -80,14 +93,14 @@ function Label({
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 768, 160);
     ctx.fillStyle = color;
-    ctx.font = "600 36px sans-serif";
+    ctx.font = `700 ${fontSize}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, 384, 80, 720);
     const value = new THREE.CanvasTexture(canvas);
     value.colorSpace = THREE.SRGBColorSpace;
     return value;
-  }, [text, bg, color]);
+  }, [text, bg, color, fontSize]);
   useEffect(() => () => texture.dispose(), [texture]);
   return (
     <mesh position={position} rotation={rotation}>
@@ -164,18 +177,19 @@ function Box({
     </RoundedBox>
   );
 }
-function Room({ night }: { night: boolean }) {
+function Room({ night, profile }: { night: boolean; profile: RoomProfile }) {
+  const palette = PALETTES[profile.theme];
   return (
     <>
       <Box
         position={[0, -0.32, 0]}
         size={[21, 0.6, 16]}
-        color={night ? "#3e4548" : "#e2dccf"}
+        color={night ? "#3e4548" : palette.lounge}
       />
       <Box
         position={[0, 0.015, 0]}
         size={[20.7, 0.06, 15.7]}
-        color={night ? "#67746c" : "#d7dccc"}
+        color={night ? "#67746c" : palette.floor}
       />
       {Array.from({ length: 20 }, (_, i) => (
         <mesh
@@ -184,28 +198,28 @@ function Room({ night }: { night: boolean }) {
           position={[-9.8 + i, 0.052, 0]}
         >
           <planeGeometry args={[0.016, 15.5]} />
-          <meshStandardMaterial color={night ? "#667369" : "#c5cdbc"} />
+          <meshStandardMaterial color={night ? "#667369" : palette.wall} />
         </mesh>
       ))}
       <Box
         position={[0, 1.35, -7.9]}
         size={[21, 2.7, 0.22]}
-        color={night ? "#4c5954" : "#eeeae0"}
+        color={night ? "#4c5954" : palette.wall}
       />
       <Box
         position={[-10.4, 1.35, 0]}
         size={[0.22, 2.7, 16]}
-        color={night ? "#44504c" : "#e7e4db"}
+        color={night ? "#44504c" : palette.wall}
       />
       <Box
         position={[-2.5, 0.07, -0.05]}
         size={[12, 0.05, 3.7]}
-        color={night ? "#547366" : "#94ad90"}
+        color={night ? "#547366" : palette.rug}
       />
       <Box
         position={[7.6, 0.075, 0.5]}
         size={[4.8, 0.06, 8.3]}
-        color={night ? "#806955" : "#d2b997"}
+        color={night ? "#806955" : palette.lounge}
       />
       {[-7, -2, 3].map((x) => (
         <group key={x} position={[x, 1.7, -7.74]}>
@@ -213,7 +227,7 @@ function Room({ night }: { night: boolean }) {
           <Box
             position={[0, 0, 0.08]}
             size={[2.83, 1.3, 0.035]}
-            color={night ? "#495b75" : "#d9e8e4"}
+            color={night ? "#495b75" : palette.window}
           />
           <Box
             position={[0, 0, 0.12]}
@@ -223,10 +237,13 @@ function Room({ night }: { night: boolean }) {
         </group>
       ))}
       <Label
-        text="LESS TABS. MORE LITTLE GUYS."
+        text={`${profile.displayName.toUpperCase().slice(0, 24)} · ${profile.theme.toUpperCase()}`}
         position={[7.5, 1.8, -7.69]}
         width={3.8}
         height={0.85}
+        bg={palette.accent}
+        color="#f9f9f2"
+        fontSize={55}
       />
       <Label
         text="MAKE ROOM FOR IDEAS"
@@ -234,19 +251,77 @@ function Room({ night }: { night: boolean }) {
         position={[-2.4, 0.12, -0.1]}
         width={5.5}
         height={0.7}
-        bg="#94ad90"
+        bg={palette.rug}
         color="#dce5cf"
       />
       <Label
-        text="D O T S   H Q"
+        text={`${profile.displayName.toUpperCase().slice(0, 22)}  HQ`}
         position={[0, -0.25, 8.05]}
         width={2.7}
         height={0.35}
-        bg="#e2dccf"
+        bg={palette.lounge}
       />
+      {profile.theme === "cosmic" && Array.from({ length: 12 }, (_, index) => <mesh key={index} position={[-8.7 + (index % 6) * 3.2, 1.8 + (index % 2) * 0.38, -7.72]}><sphereGeometry args={[0.055, 8, 8]} /><meshBasicMaterial color="#fcf5c9" /></mesh>)}
+      <Label text="WORK STATIONS" rotation={[-Math.PI / 2, 0, 0]} position={[-2.5, 0.12, -1.75]} width={3.1} height={0.42} bg={night ? "#547366" : palette.rug} color="#f7f8ef" />
+      <Label text="COFFEE BREAK" rotation={[-Math.PI / 2, 0, 0]} position={[5.7, 0.12, -1.7]} width={2.7} height={0.42} bg={night ? "#806955" : palette.lounge} color="#fffaf0" />
       <Furniture />
     </>
   );
+}
+function KnowledgeDisplay({ books, selected, onSelect, accent }: {
+  books: KnowledgeBook[]; selected: string | null; onSelect: (id: string) => void; accent: string;
+}) {
+  if (!books.length) return null;
+  const covers = ["#e8a36f", "#78afad", "#ad91c6", "#d1b46f", "#91b98b", "#d8899a", "#7c9ac1", "#d5a881"];
+  return <group position={[5.5, 0, 1.5]}>
+    <RoundedBox args={[3.2, 0.24, 2.2]} radius={0.08} smoothness={2} position={[0, 0.2, 0]} castShadow receiveShadow><meshStandardMaterial color="#e5d8be" roughness={0.8} /></RoundedBox>
+    <Label text="THE LEARNING LIBRARY" position={[0, 0.32, 1.13]} width={2.3} height={0.28} bg={accent} color="#fffdf4" fontSize={68} />
+    {books.slice(0, 8).map((book, index) => {
+      const x = -0.9 + (index % 3) * 0.9;
+      const z = -0.65 + Math.floor(index / 3) * 0.62;
+      return <group key={book.id} position={[books.length === 1 ? 0 : x, 0.42, books.length === 1 ? -0.05 : z]} scale={books.length === 1 ? 2 : 1.12} rotation={[0, (index % 2 ? 0.13 : -0.1), 0]}
+        onClick={(event) => { event.stopPropagation(); onSelect(book.id); }}
+        onPointerOver={() => { document.body.style.cursor = "pointer"; }}
+        onPointerOut={() => { document.body.style.cursor = "auto"; }}>
+        <mesh castShadow receiveShadow><boxGeometry args={[0.72, 0.14, 0.46]} /><meshStandardMaterial color={covers[index]} roughness={0.63} /></mesh>
+        <mesh position={[-0.32, 0.01, 0]}><boxGeometry args={[0.045, 0.16, 0.46]} /><meshStandardMaterial color="#f8e5ba" /></mesh>
+        <Label text={book.title.slice(0, 28)} rotation={[-Math.PI / 2, 0, 0]} position={[0.03, 0.077, 0]} width={0.61} height={0.34} bg={covers[index]} color="#253029" fontSize={70} />
+        {selected === book.id && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]}><ringGeometry args={[0.47, 0.53, 32]} /><meshBasicMaterial color="#f8ca57" side={THREE.DoubleSide} /></mesh>}
+      </group>;
+    })}
+  </group>;
+}
+function ProjectWall({ projects, selected, onSelect, accent }: {
+  projects: RoomProject[]; selected: string | null; onSelect: (id: string) => void; accent: string;
+}) {
+  return <group>{projects.slice(0, 8).map((project, index) => <group key={project.id}
+    position={[-10.22, index < 4 ? 1.85 : 0.75, -4.5 + (index % 4) * 2.4]}
+    rotation={[0, Math.PI / 2, 0]}
+    onClick={(event) => { event.stopPropagation(); onSelect(project.id); }}
+    onPointerOver={() => { document.body.style.cursor = "pointer"; }}
+    onPointerOut={() => { document.body.style.cursor = "auto"; }}>
+    <mesh><boxGeometry args={[1.75, 0.86, 0.09]} /><meshStandardMaterial color={selected === project.id ? "#f0c55d" : accent} /></mesh>
+    <Label text={project.title.slice(0, 30)} position={[0, 0, 0.052]} width={1.6} height={0.48} bg="#fbfaf1" color="#334335" fontSize={67} />
+  </group>)}</group>;
+}
+function InvitePortal({ onInvite, accent }: { onInvite?: () => void; accent: string }) {
+  if (!onInvite) return null;
+  return <group position={[8.7, 0.1, 5.7]}
+    onClick={(event) => { event.stopPropagation(); onInvite(); }}
+    onPointerOver={() => { document.body.style.cursor = "pointer"; }}
+    onPointerOut={() => { document.body.style.cursor = "auto"; }}>
+    <mesh position={[0, 1.06, 0]}><torusGeometry args={[0.67, 0.13, 12, 48]} /><meshStandardMaterial color={accent} metalness={0.2} roughness={0.35} emissive={accent} emissiveIntensity={0.18} /></mesh>
+    <mesh position={[0, 1.06, -0.05]}><circleGeometry args={[0.61, 48]} /><meshBasicMaterial color={accent} transparent opacity={0.25} side={THREE.DoubleSide} /></mesh>
+    <Label text="INVITE FRIENDS" position={[0, 2.04, 0]} width={1.75} height={0.32} bg={accent} color="#fffdf4" fontSize={72} />
+  </group>;
+}
+function ContextMeter({ agent }: { agent: OfficeAgent }) {
+  const known = agent.contextUsed !== null && agent.contextWindow !== null;
+  const fraction = known ? THREE.MathUtils.clamp(agent.contextUsed! / agent.contextWindow!, 0, 1) : 0;
+  return <group position={[0.87, 0, 0.25]}>
+    <RoundedBox args={[0.23, 0.92, 0.12]} radius={0.06} smoothness={2} position={[0, 1.02, 0]}><meshStandardMaterial color="#e7e9e2" /></RoundedBox>
+    {known ? <RoundedBox args={[0.13, Math.max(0.005, fraction * 0.75), 0.14]} radius={0.03} smoothness={2} position={[0, 0.63 + fraction * 0.375, 0.015]}><meshStandardMaterial color={fraction > 0.85 ? "#e79d57" : "#7cbd86"} /></RoundedBox> : <Label text="?" position={[0, 1.02, 0.08]} width={0.16} height={0.25} bg="#e7e9e2" color="#6d7a73" fontSize={90} />}
+  </group>;
 }
 function Walker({
   kind,
@@ -257,6 +332,8 @@ function Walker({
   onSelect,
   label,
   status,
+  agent,
+  reducedMotion,
 }: {
   kind: CharacterKind;
   index: number;
@@ -266,6 +343,8 @@ function Walker({
   onSelect: () => void;
   label?: string;
   status: AgentStatus | "preview";
+  agent?: OfficeAgent;
+  reducedMotion: boolean;
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
@@ -273,7 +352,7 @@ function Walker({
   useEffect(() => {
     const instance = createMascotCharacter(kind);
     mascot.current = instance;
-    instance.group.scale.setScalar(1.02);
+    instance.group.scale.setScalar(1.13);
     parent.current?.add(instance.group);
     return () => {
       instance.dispose();
@@ -282,16 +361,17 @@ function Walker({
   }, [kind]);
   useFrame((_, dt) => {
     if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const pose = officePose(status, index, elapsed.current, total);
+    const pose = officePose(status, index, reducedMotion ? 0 : elapsed.current, total);
     if (parent.current) {
       const target = new THREE.Vector3(pose.x, pose.y, pose.z);
       const moving = parent.current.position.distanceTo(target) > 0.12;
-      parent.current.position.lerp(target, 1 - Math.exp(-dt * 5));
+      if (reducedMotion) parent.current.position.copy(target);
+      else parent.current.position.lerp(target, 1 - Math.exp(-dt * 5));
       parent.current.rotation.y = pose.facing;
       mascot.current?.update(
-        elapsed.current,
-        paused ? 0 : pose.walking || moving ? 1 : 0,
-        pose.sitting && !moving,
+        reducedMotion ? 0 : elapsed.current,
+        paused || reducedMotion ? 0 : pose.walking || moving ? 1 : 0,
+        pose.sitting && (!moving || reducedMotion),
       );
     }
   });
@@ -315,7 +395,11 @@ function Walker({
           <meshBasicMaterial color="#f2b94a" side={THREE.DoubleSide} />
         </mesh>
       )}
-      {label && (
+      {agent ? <Billboard>
+        <ContextMeter agent={agent} />
+        <Label text={`${agent.status.toUpperCase()} · ${agent.name.slice(0, 32)}`} position={[0, 2.57, 0]} width={3.1} height={0.48} bg={STATUS_COLOR[agent.status]} color="#233026" fontSize={68} />
+        <Label text={`${agent.harness} / ${agent.model ?? "model ?"} · ${agent.contextUsed !== null && agent.contextWindow !== null ? `${Math.round((agent.contextUsed / agent.contextWindow) * 100)}% ctx` : "ctx ?"}`} position={[0, 2.17, 0]} width={3.1} height={0.28} bg="#eef1e9" color="#47564b" fontSize={59} />
+      </Billboard> : label && (
         <Billboard position={[0, 2.35, 0]}>
           <Label
             text={`${status === "working" ? "● " : ""}${label.length > 34 ? label.slice(0, 34) + "…" : label}`}
@@ -331,7 +415,7 @@ function Walker({
 function CameraReset({ resetKey }: { resetKey: number }) {
   const { camera, controls, invalidate } = useThree();
   useEffect(() => {
-    camera.position.set(22, 21, 25);
+    camera.position.set(18, 17, 20);
     const orbit = controls as unknown as {
       target: THREE.Vector3;
       update: () => void;
@@ -350,6 +434,14 @@ export default function OfficeWorld({
   cameraKey,
   selected,
   onSelect,
+  profile,
+  books,
+  projects,
+  selectedBook,
+  selectedProject,
+  onSelectBook,
+  onSelectProject,
+  onInvite,
   onReady,
 }: {
   agents: OfficeAgent[];
@@ -359,17 +451,34 @@ export default function OfficeWorld({
   cameraKey: number;
   selected: string | null;
   onSelect: (id: string) => void;
+  profile: RoomProfile;
+  books: KnowledgeBook[];
+  projects: RoomProject[];
+  selectedBook: string | null;
+  selectedProject: string | null;
+  onSelectBook: (id: string) => void;
+  onSelectProject: (id: string) => void;
+  onInvite?: () => void;
   onReady: () => void;
 }) {
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(preference.matches);
+    update();
+    preference.addEventListener("change", update);
+    return () => preference.removeEventListener("change", update);
+  }, []);
+  const palette = PALETTES[profile.theme];
   return (
     <Canvas
       shadows
       dpr={[1, 1.7]}
-      camera={{ position: [22, 21, 25], fov: 38 }}
+      camera={{ position: [18, 17, 20], fov: 38 }}
       onCreated={onReady}
       aria-label="Interactive 3D office"
     >
-      <color attach="background" args={[night ? "#252e32" : "#e9ebe5"]} />
+      <color attach="background" args={[night ? "#252e32" : palette.backdrop]} />
       <ambientLight intensity={night ? 0.8 : 1.6} />
       <hemisphereLight args={["#fff8e9", "#748575", 1.6]} />
       <directionalLight
@@ -384,8 +493,11 @@ export default function OfficeWorld({
         shadow-bias={-0.001}
       />
       <Suspense fallback={null}>
-        <Room night={night} />
+        <Room night={night} profile={profile} />
       </Suspense>
+      <KnowledgeDisplay books={books} selected={selectedBook} onSelect={onSelectBook} accent={palette.accent} />
+      <ProjectWall projects={projects} selected={selectedProject} onSelect={onSelectProject} accent={palette.accent} />
+      <InvitePortal onInvite={onInvite} accent={palette.accent} />
       {(preview
         ? CHARACTERS.map((c) => ({
             id: c.kind,
@@ -398,6 +510,7 @@ export default function OfficeWorld({
             kind: a.character ?? agentCharacter(a.id, a.model, a.harness),
             label: a.name,
             status: a.status,
+            agent: a,
           }))
       ).map((a, i, array) => (
         <Walker
@@ -406,6 +519,7 @@ export default function OfficeWorld({
           index={i}
           total={array.length}
           paused={paused}
+          reducedMotion={reducedMotion}
           selected={selected === a.id}
           onSelect={() => onSelect(a.id)}
         />

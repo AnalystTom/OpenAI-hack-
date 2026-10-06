@@ -30,6 +30,14 @@ The shared data contract is in `src/types.ts`. Snapshot data stays in the curren
 
 Office code and assets are adapted from [Claw3D](https://github.com/iamlukethedev/Claw3D); see `THIRD_PARTY_LICENSES/` for attribution and the source revision.
 
+## Personalized rooms and invitations
+
+Open **Room studio** to add a public social profile URL, a room name, and interests. The URL is a visual seed; the app does not fetch or scrape the profile. Interests can suggest a coastal, garden, studio, or night-lab palette, and the owner can choose the palette directly.
+
+The **Books** tab stores owner-written summaries of actual learning, optionally linked to a local agent session. Books appear as clickable objects in the room; opening them advances the local exploration counter. The **Projects** tab pins real projects to clickable wall posters. These room edits are stored in the current browser's local storage. No learning summary or project is inferred from a task title.
+
+The **Invite** tab creates a read-only snapshot link. The owner chooses whether to include their social link and interests, agent names/models/statuses, books, projects, and manually entered token/spending totals. All categories start off. Agent task text, current context telemetry, source session IDs, and recorded history are excluded from invitations. Per-agent token/spending totals appear only when both agents and totals are shared. Anyone with the link can read the selected snapshot; it is encoded in the URL fragment and is not a live connection. Friends can open the link directly or paste it into **Visit a friend's room**. There is no hosted room account, presence, revocation, or automatic spending feed yet.
+
 ## Local Robots session feed
 
 In the import dialog choose **Import Robots sessions**. The local dev server reads up to six recent, non-archived sessions whose project is `~/Dev/Robots`. It refreshes every five seconds using the local Codex SQLite index and bounded tails of each session event log. Credentials and tool arguments/output are never returned. No session data is committed or bundled into the site.

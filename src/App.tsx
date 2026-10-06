@@ -11,6 +11,9 @@ import {
   Maximize,
   Moon,
   MousePointer2,
+  BookOpen,
+  Palette,
+  Share2,
   Pause,
   Play,
   RotateCcw,
@@ -24,6 +27,30 @@ import type { OfficeAgent, RecordedActivity } from "./types";
 import { parseOfficeSnapshot } from "./snapshot";
 import { agentCharacter } from "./officeBehavior";
 import { useRobotsSessions } from "./integrations/codex/useRobotsSessions";
+import RoomStudio from "./components/RoomStudio";
+import {
+  DEFAULT_SHARE, EMPTY_PROFILE, EMPTY_STATS, readGuestRoom,
+  type GuestRoom, type KnowledgeBook, type RoomProfile, type RoomProject,
+  type RoomStats, type ShareOptions,
+} from "./socialRoom";
+
+function readRoomDraft() {
+  try {
+    const raw = localStorage.getItem("dots-room-draft-v1");
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object") return null;
+    const validTheme = ["studio", "grove", "coastal", "cosmic"].includes(value.profile?.theme);
+    return {
+      profile: validTheme && typeof value.profile?.displayName === "string" && typeof value.profile?.socialUrl === "string" && typeof value.profile?.interests === "string" ? value.profile as RoomProfile : EMPTY_PROFILE,
+      books: Array.isArray(value.books) ? value.books.filter((book: KnowledgeBook) => book && typeof book.id === "string" && typeof book.title === "string" && typeof book.summary === "string").slice(0, 8) as KnowledgeBook[] : [],
+      projects: Array.isArray(value.projects) ? value.projects.filter((project: RoomProject) => project && typeof project.id === "string" && typeof project.title === "string" && typeof project.url === "string").slice(0, 8) as RoomProject[] : [],
+      stats: value.stats && typeof value.stats === "object" ? { ...EMPTY_STATS, ...value.stats, agentTotals: value.stats.agentTotals && typeof value.stats.agentTotals === "object" ? value.stats.agentTotals : {} } as RoomStats : EMPTY_STATS,
+      share: value.share && typeof value.share === "object" ? { ...DEFAULT_SHARE, ...value.share } as ShareOptions : DEFAULT_SHARE,
+    };
+  } catch { return null; }
+}
+const roomDraft = readRoomDraft();
 
 export default function App() {
   const [agents, setAgents] = useState<OfficeAgent[]>([]);
@@ -38,9 +65,32 @@ export default function App() {
   const [help, setHelp] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const [studioTab, setStudioTab] = useState<"profile" | "library" | "projects" | "invite" | null>(null);
+  const [profile, setProfile] = useState<RoomProfile>(roomDraft?.profile ?? EMPTY_PROFILE);
+  const [books, setBooks] = useState<KnowledgeBook[]>(roomDraft?.books ?? []);
+  const [projects, setProjects] = useState<RoomProject[]>(roomDraft?.projects ?? []);
+  const [stats, setStats] = useState<RoomStats>(roomDraft?.stats ?? EMPTY_STATS);
+  const [share, setShare] = useState<ShareOptions>(roomDraft?.share ?? DEFAULT_SHARE);
+  const [guest, setGuest] = useState<GuestRoom | null>(() => readGuestRoom(window.location.hash));
+  const [selectedBook, setSelectedBook] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [openedBooks, setOpenedBooks] = useState<string[]>([]);
+  useEffect(() => {
+    try { localStorage.setItem("dots-room-draft-v1", JSON.stringify({ profile, books, projects, stats, share })); }
+    catch { /* The current room remains usable when browser storage is unavailable. */ }
+  }, [profile, books, projects, stats, share]);
+  useEffect(() => {
+    const update = () => { setGuest(readGuestRoom(window.location.hash)); setSelected(null); setSelectedBook(null); setSelectedProject(null); setOpenedBooks([]); };
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
   const input = useRef<HTMLInputElement>(null);
   const office = useRef<HTMLDivElement>(null);
-  const character = preview
+  const showPreview = !guest && preview;
+  const visibleProfile = guest?.profile ?? profile;
+  const visibleBooks = guest?.books ?? books;
+  const visibleProjects = guest?.projects ?? projects;
+  const character = showPreview
     ? CHARACTERS.find((c) => c.kind === selected)
     : undefined;
   const local = useRobotsSessions(setAgents);
@@ -78,9 +128,16 @@ export default function App() {
       ? { ...a, status: "offline" as const }
       : a;
   });
-  const agent = !preview
-    ? visibleAgents.find((a) => a.id === selected)
+  const roomAgents = guest?.agents ?? visibleAgents;
+  const agent = !showPreview
+    ? roomAgents.find((a) => a.id === selected)
     : undefined;
+  const book = visibleBooks.find((item) => item.id === selectedBook);
+  const project = visibleProjects.find((item) => item.id === selectedProject);
+  function selectAgent(id: string) { setSelected(id); setSelectedBook(null); setSelectedProject(null); }
+  function selectBook(id: string) { setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
+  function selectProject(id: string) { setSelected(null); setSelectedBook(null); setSelectedProject(id); }
+  function leaveGuest() { window.location.hash = ""; setGuest(null); }
   const behavior = (a: OfficeAgent) =>
     a.status === "working"
       ? "Working at desk"
@@ -147,7 +204,7 @@ export default function App() {
         <span className="office-name">
           The little office <span>HQ</span>
         </span>
-        <nav aria-label="Office views">
+        {guest ? <nav aria-label="Shared room"><span className="guest-nav-label">Visiting {guest.profile.displayName}</span><button onClick={leaveGuest}>Back to my room</button></nav> : <nav aria-label="Office views">
           <button
             className={preview ? "active" : ""}
             onClick={() => switchView(true)}
@@ -162,36 +219,29 @@ export default function App() {
             <Users size={15} />
             Your agents {agents.length > 0 && <small>{agents.length}</small>}
           </button>
-        </nav>
-        <button className="import-button" onClick={() => setModal(true)}>
-          <ArrowDownToLine size={15} />
-          Import agents
-        </button>
+        </nav>}
+        <div className="topbar-actions">
+          {!guest && <button className="studio-button" onClick={() => setStudioTab("profile")}><Palette size={15} /> Room studio</button>}
+          {!guest && <button className="import-button" onClick={() => setModal(true)}><ArrowDownToLine size={15} /> Import agents</button>}
+        </div>
       </header>
       <main>
-        <aside className="sidebar">
-          <div className="eyebrow">
-            <span /> A NEW WAY TO WORK
-          </div>
-          <h1>
-            Big ideas.
-            <br />
-            Little coworkers<span>.</span>
-          </h1>
-          <p className="intro">
-            Your AI team deserves more than another browser tab.
-          </p>
+        <aside className={`sidebar ${guest ? "guest-sidebar" : ""}`}>
+          <div className="eyebrow"><span /> {guest ? "FRIEND'S ROOM" : "A NEW WAY TO WORK"}</div>
+          <h1>{guest ? guest.profile.displayName : profile.displayName === "My room" ? <>Big ideas.<br />Little coworkers<span>.</span></> : <>{profile.displayName}<span>.</span></>}</h1>
+          <p className="intro">{guest ? "A shared snapshot of this friend's agent world." : profile.interests || "Your AI team deserves more than another browser tab."}</p>
+          {visibleProfile.socialUrl && <a className="social-link" href={visibleProfile.socialUrl} target="_blank" rel="noreferrer">View social profile <ArrowUpRight size={12} /></a>}
           <div className="section-heading">
-            {preview ? "MEET THE LITTLE GUYS" : "YOUR OFFICE"}
-            <span>{preview ? CHARACTERS.length : agents.length}</span>
+            {showPreview ? "MEET THE LITTLE GUYS" : guest ? "SHARED AGENTS" : "YOUR OFFICE"}
+            <span>{showPreview ? CHARACTERS.length : roomAgents.length}</span>
           </div>
-          {preview ? (
+          {showPreview ? (
             <div className="roster">
               {CHARACTERS.map((c) => (
                 <button
                   key={c.kind}
                   className={`roster-item ${selected === c.kind ? "selected" : ""}`}
-                  onClick={() => setSelected(c.kind)}
+                  onClick={() => selectAgent(c.kind)}
                 >
                   <span
                     className={`avatar ${c.kind}`}
@@ -215,13 +265,13 @@ export default function App() {
                 </button>
               ))}
             </div>
-          ) : agents.length ? (
+          ) : roomAgents.length ? (
             <div className="roster">
-              {visibleAgents.map((a) => (
+              {roomAgents.map((a) => (
                 <button
                   className={`roster-item ${selected === a.id ? "selected" : ""}`}
                   key={a.id}
-                  onClick={() => setSelected(a.id)}
+                  onClick={() => selectAgent(a.id)}
                 >
                   <span
                     className="avatar"
@@ -249,18 +299,19 @@ export default function App() {
           ) : (
             <div className="empty-team">
               <Users size={25} />
-              <h3>Room for your team</h3>
-              <p>
-                Import a real agent snapshot to bring your own coworkers into
-                the office.
-              </p>
-              <button onClick={() => setModal(true)}>
-                Bring your agents <ArrowUpRight size={14} />
-              </button>
+              <h3>{guest ? "No agents shared" : "Room for your team"}</h3>
+              <p>{guest ? "This invitation did not include agent sessions." : "Import a real agent snapshot to bring your own coworkers into the office."}</p>
+              {!guest && <button onClick={() => setModal(true)}>Bring your agents <ArrowUpRight size={14} /></button>}
             </div>
           )}
+          <div className="room-collections">
+            <button onClick={() => guest ? visibleBooks[0] && selectBook(visibleBooks[0].id) : setStudioTab("library")}><BookOpen size={15} /><span>Learning library</span><b>{visibleBooks.length}</b></button>
+            {visibleBooks.length > 0 && <small>{openedBooks.filter((id) => visibleBooks.some((item) => item.id === id)).length} of {visibleBooks.length} books explored</small>}
+            <button onClick={() => guest ? visibleProjects[0] && selectProject(visibleProjects[0].id) : setStudioTab("projects")}><Sparkles size={15} /><span>Project wall</span><b>{visibleProjects.length}</b></button>
+          </div>
+          {guest?.stats && <div className="friend-stats"><b>Shared totals</b><span>Tokens <strong>{guest.stats.totalTokens === null ? "Not shared" : guest.stats.totalTokens.toLocaleString()}</strong></span><span>Spend <strong>{guest.stats.totalSpend === null ? "Not shared" : `${guest.stats.currency} ${guest.stats.totalSpend.toFixed(2)}`}</strong></span><small>Owner-entered snapshot</small></div>}
           <div className="sidebar-bottom">
-            {local.enabled && (
+            {!guest && local.enabled && (
               <div className="connection-summary">
                 <b>
                   Robots ·{" "}
@@ -285,13 +336,13 @@ export default function App() {
             <div className="coffee-note">
               <Coffee size={18} />
               <p>
-                {preview
+                {showPreview
                   ? "No meetings. Just little guys."
-                  : "A window into your team."}
+                  : guest ? "A friend's shared world." : "A window into your team."}
                 <small>
-                  {preview
+                  {showPreview
                     ? "Character preview · no live agent activity"
-                    : local.enabled
+                    : guest ? "Read-only invitation snapshot" : local.enabled
                       ? "Visualising session events · refreshed every 5s"
                       : "Imported snapshots are not live connections."}
                 </small>
@@ -307,15 +358,15 @@ export default function App() {
           <div className="world-top">
             <div className="world-caption">
               <span className="live-dot" />
-              {preview
+              {showPreview
                 ? "CHARACTER PLAYGROUND"
-                : replay
+                : guest ? "FRIEND'S ROOM" : replay
                   ? "RECORDED TASK REPLAY"
                   : "YOUR AGENT OFFICE"}
               <span className="mode-label">
-                {preview
+                {showPreview
                   ? "Preview"
-                  : replay
+                  : guest ? "Shared snapshot" : replay
                     ? "Replay"
                     : local.enabled
                       ? local.state === "connected"
@@ -333,16 +384,24 @@ export default function App() {
             </button>
           </div>
           <OfficeWorld
-            agents={visibleAgents}
-            preview={preview}
+            agents={roomAgents}
+            preview={showPreview}
             paused={paused}
             night={night}
             cameraKey={cameraKey}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={selectAgent}
+            profile={visibleProfile}
+            books={visibleBooks}
+            projects={visibleProjects}
+            selectedBook={selectedBook}
+            selectedProject={selectedProject}
+            onSelectBook={selectBook}
+            onSelectProject={selectProject}
+            onInvite={guest ? undefined : () => setStudioTab("invite")}
             onReady={() => setReady(true)}
           />
-          {!preview &&
+          {!guest && !showPreview &&
             local.enabled &&
             local.state === "loading" &&
             !agents.length && (
@@ -350,12 +409,12 @@ export default function App() {
                 Reading your Robots sessions…
               </div>
             )}
-          {!preview && local.error && (
+          {!guest && !showPreview && local.error && (
             <div className="connection-banner error" role="alert">
               {local.error}
             </div>
           )}
-          {!preview && replay && (
+          {!guest && !showPreview && replay && (
             <div className="replay-banner" role="status">
               <b>Recorded replay</b>
               <span>
@@ -368,7 +427,7 @@ export default function App() {
             </div>
           )}
           {!ready && <div className="loading-state">Opening the office…</div>}
-          {!preview && !agents.length && (
+          {!guest && !showPreview && !agents.length && (
             <div className="world-empty">
               <span className="empty-icon">
                 <Users size={22} />
@@ -392,19 +451,22 @@ export default function App() {
               </small>
             </div>
           )}
-          {(character || agent) && (
+          {(character || agent || book || project) && (
             <div className="detail-card">
               <button
                 className="close"
                 aria-label="Close details"
-                onClick={() => setSelected(null)}
+                onClick={() => { setSelected(null); setSelectedBook(null); setSelectedProject(null); }}
               >
                 <X size={16} />
               </button>
               <span className="eyebrow">
-                {character ? "CHARACTER STUDIO" : agent?.harness}
+                {book ? "LEARNING BOOK" : project ? "PROJECT WALL" : character ? "CHARACTER STUDIO" : agent?.harness}
               </span>
-              <h2>{character?.name ?? agent?.name}</h2>
+              <h2>{book?.title ?? project?.title ?? character?.name ?? agent?.name}</h2>
+              {book && <><p>{book.summary}</p>{book.sessionId && !guest && <small>Linked to {agents.find((item) => item.id === book.sessionId)?.name ?? "a session"}</small>}<span className="detail-tag"><BookOpen size={12} /> {openedBooks.length} of {visibleBooks.length} books explored</span></>}
+              {project && <><p>A project pinned to this room.</p>{project.url && <a className="detail-link" href={project.url} target="_blank" rel="noreferrer">Open project <ArrowUpRight size={13} /></a>}</>}
+              {!book && !project && <>
               {agent && (
                 <span className={`agent-behavior ${agent.status}`}>
                   {behavior(agent)}
@@ -448,6 +510,7 @@ export default function App() {
                             : "Not reported"}
                         </dd>
                       </div>
+                      {guest?.stats?.agentTotals?.[agent.id] && <><div><dt>Total tokens</dt><dd>{guest.stats.agentTotals[agent.id].totalTokens === null ? "Not reported" : guest.stats.agentTotals[agent.id].totalTokens!.toLocaleString()}</dd></div><div><dt>Spend</dt><dd>{guest.stats.agentTotals[agent.id].totalSpend === null ? "Not reported" : `USD ${guest.stats.agentTotals[agent.id].totalSpend!.toFixed(2)}`}</dd></div></>}
                     </dl>
                     <small>
                       Source event {new Date(agent.updatedAt).toLocaleString()}
@@ -461,7 +524,7 @@ export default function App() {
                         Replay last recorded task
                       </button>
                     )}
-                    {local.enabled && (
+                    {!guest && local.enabled && (
                       <small className="context-note">
                         Context is the last reported input size, not lifetime
                         usage.
@@ -470,6 +533,7 @@ export default function App() {
                   </>
                 )
               )}
+              </>}
             </div>
           )}
           <div className="world-bottom">
@@ -525,7 +589,7 @@ export default function App() {
       <footer>
         <span>
           <span className="footer-dot" />
-          {preview
+          {guest ? `${guest.profile.displayName} · shared snapshot` : showPreview
             ? "A playground for your future team"
             : replay
               ? "Recorded task replay · no task is being executed"
@@ -538,6 +602,7 @@ export default function App() {
           with a little <Heart size={11} />
         </span>
       </footer>
+      {!guest && studioTab && <RoomStudio key={studioTab} initialTab={studioTab} profile={profile} onProfile={setProfile} books={books} onBooks={setBooks} projects={projects} onProjects={setProjects} stats={stats} onStats={setStats} share={share} onShare={setShare} agents={visibleAgents} onClose={() => setStudioTab(null)} />}
       {modal && (
         <div className="modal-backdrop" onClick={() => setModal(false)}>
           <section
