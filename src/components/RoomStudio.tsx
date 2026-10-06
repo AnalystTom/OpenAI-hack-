@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from "react";
-import { BookOpen, Check, Copy, ExternalLink, Palette, Plus, Share2, Trash2, X } from "lucide-react";
+import { BookOpen, Check, Copy, ExternalLink, FileUp, Palette, Plus, Share2, Trash2, X } from "lucide-react";
 import type { OfficeAgent } from "../types";
+import SocialImporter from "./SocialImporter";
 import {
-  createGuestRoom, invitationUrl, normalizePublicUrl, readGuestRoom, themeFromProfile,
+  createGuestRoom, EMPTY_PROFILE, invitationUrl, normalizePublicUrl, readGuestRoom, themeFromProfile,
   type KnowledgeBook, type RoomProfile, type RoomProject, type RoomStats,
   type RoomTheme, type ShareOptions,
 } from "../socialRoom";
 
-type Tab = "profile" | "library" | "projects" | "invite";
+type Tab = "profile" | "social" | "library" | "projects" | "invite";
 const THEMES: { id: RoomTheme; name: string }[] = [
   { id: "studio", name: "Creative studio" },
   { id: "grove", name: "Garden room" },
@@ -57,13 +58,25 @@ export default function RoomStudio({
     }
   }
   function suggestTheme() {
-    try {
-      const next = themeFromProfile(normalizePublicUrl(socialUrl), interests);
-      setTheme(next);
-      setMessage("Theme suggested from the URL and interests you entered. No profile data was fetched.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to read URL.");
-    }
+    setTheme(themeFromProfile("", interests));
+    setMessage("Theme suggested from the interests you entered.");
+  }
+  function applySocialImport(next: RoomProfile, platform: "linkedin" | "x") {
+    onProfile(next);
+    setSocialUrl(next.socialUrl);
+    setDisplayName(next.displayName);
+    setInterests(next.interests);
+    setTheme(next.theme);
+    setTab("profile");
+    setMessage(`${platform === "linkedin" ? "LinkedIn" : "X"} information added to your room. You can fine-tune the look here.`);
+  }
+  function removeSocialImport() {
+    onProfile(EMPTY_PROFILE);
+    setSocialUrl("");
+    setDisplayName(EMPTY_PROFILE.displayName);
+    setInterests("");
+    setTheme(EMPTY_PROFILE.theme);
+    setMessage("Imported profile details removed from your room.");
   }
   function addBook(event: FormEvent) {
     event.preventDefault();
@@ -116,21 +129,22 @@ export default function RoomStudio({
         <button className="close" aria-label="Close room studio" onClick={onClose}><X size={18} /></button>
         <div className="eyebrow">MAKE THE ROOM YOURS</div>
         <h2 id="studio-title">Room studio</h2>
-        <p className="studio-intro">Shape your world, shelve what you learned, and invite friends into a snapshot you choose to share.</p>
+        <p className="studio-intro">Shape your world from your own interests, shelve what you learned, and invite friends into a snapshot you choose to share.</p>
         <nav className="studio-tabs" aria-label="Room studio sections">
           <button className={tab === "profile" ? "active" : ""} onClick={() => { setTab("profile"); setMessage(""); }}><Palette size={15} /> Look</button>
+          <button className={tab === "social" ? "active" : ""} onClick={() => { setTab("social"); setMessage(""); }}><FileUp size={15} /> Social import</button>
           <button className={tab === "library" ? "active" : ""} onClick={() => { setTab("library"); setMessage(""); }}><BookOpen size={15} /> Books</button>
           <button className={tab === "projects" ? "active" : ""} onClick={() => { setTab("projects"); setMessage(""); }}>Projects</button>
           <button className={tab === "invite" ? "active" : ""} onClick={() => { setTab("invite"); setMessage(""); }}><Share2 size={15} /> Invite</button>
         </nav>
         {tab === "profile" && <form className="studio-form" onSubmit={saveProfile}>
-          <label>Public social profile URL<input type="url" placeholder="https://www.linkedin.com/in/your-name/" value={socialUrl} onChange={(event) => setSocialUrl(event.target.value)} /></label>
-          <p className="field-note">The URL seeds a visual style and can be displayed in invitations. This app does not read your social profile.</p>
+          <div className="linked-social"><span>{socialUrl ? `Linked profile: ${socialUrl}` : interests ? "Room look based on your interests" : "No social profile imported yet"}</span><button type="button" className="quiet-button" onClick={() => { setTab("social"); setMessage(""); }}>{socialUrl ? "Change import" : "Import LinkedIn or X"}</button>{socialUrl && <button type="button" className="quiet-button" onClick={removeSocialImport}>Remove import</button>}</div>
           <label>Room name<input maxLength={50} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
           <label>Interests or bio keywords<input maxLength={180} placeholder="e.g. ocean science, design, robotics" value={interests} onChange={(event) => setInterests(event.target.value)} /></label>
           <div className="theme-row">{THEMES.map((option) => <button type="button" key={option.id} className={`theme-choice ${theme === option.id ? "active" : ""} theme-${option.id}`} onClick={() => setTheme(option.id)}>{option.name}</button>)}</div>
-          <div className="studio-actions"><button type="button" className="quiet-button" onClick={suggestTheme}>Suggest from URL</button><button type="submit" className="import-button">Apply to room</button></div>
+          <div className="studio-actions"><button type="button" className="quiet-button" onClick={suggestTheme}>Suggest from interests</button><button type="submit" className="import-button">Apply to room</button></div>
         </form>}
+        {tab === "social" && <SocialImporter profile={profile} onApply={applySocialImport} />}
         {tab === "library" && <div className="studio-form">
           <p className="field-note">Each book is a summary you provide from an agent session. We never guess what a session taught you from its title.</p>
           <div className="studio-list">{books.length ? books.map((book) => <div className="studio-list-item" key={book.id}><BookOpen size={18} /><span><b>{book.title}</b><small>{book.summary}</small></span><button aria-label={`Remove ${book.title}`} onClick={() => onBooks(books.filter((item) => item.id !== book.id))}><Trash2 size={15} /></button></div>) : <p className="studio-empty">Your library is ready for its first discovery.</p>}</div>

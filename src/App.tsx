@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleHelp,
   Coffee,
+  Globe2,
   Heart,
   Maximize,
   Moon,
@@ -90,7 +91,7 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [ready, setReady] = useState(false);
-  const [studioTab, setStudioTab] = useState<"profile" | "library" | "projects" | "invite" | null>(null);
+  const [studioTab, setStudioTab] = useState<"profile" | "social" | "library" | "projects" | "invite" | null>(null);
   const [profile, setProfile] = useState<RoomProfile>(roomDraft?.profile ?? EMPTY_PROFILE);
   const [books, setBooks] = useState<KnowledgeBook[]>(roomDraft?.books ?? []);
   const [projects, setProjects] = useState<RoomProject[]>(roomDraft?.projects ?? []);
@@ -240,6 +241,7 @@ export default function App() {
         </nav>}
         <div className="topbar-actions">
           {!guest && <button className="studio-button" onClick={() => setStudioTab("profile")}><Palette size={15} /> Room studio</button>}
+          {!guest && <button className="studio-button social-top-button" title="Import LinkedIn or X" onClick={() => setStudioTab("social")}><Globe2 size={15} /> Import social</button>}
           {!guest && <button className="import-button" onClick={() => setWelcome(true)}><ArrowDownToLine size={15} /> Import agents</button>}
         </div>
       </header>
