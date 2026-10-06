@@ -21,7 +21,7 @@ export interface MascotCharacter {
   /** Faces +Z, stands on y=0. Move, rotate, or scale this group freely. */
   group: THREE.Group;
   /** timeSeconds is elapsed time; walking is a 0–1 gait intensity. */
-  update: (timeSeconds: number, walking?: number) => void;
+  update: (timeSeconds: number, walking?: number, sitting?: boolean) => void;
   dispose: () => void;
 }
 
@@ -318,7 +318,7 @@ export function createMascotCharacter(kind: MascotKind): MascotCharacter {
 
   return {
     group,
-    update(timeSeconds, walking = 0) {
+    update(timeSeconds, walking = 0, sitting = false) {
       const amount = THREE.MathUtils.clamp(walking, 0, 1);
       const step = timeSeconds * 8.5;
       const stride = Math.sin(step) * amount;
@@ -333,6 +333,13 @@ export function createMascotCharacter(kind: MascotKind): MascotCharacter {
       legs[1].position.y = 0.43 + Math.max(0, -stride) * 0.075;
       arms[0].rotation.x = -stride * 0.4;
       arms[1].rotation.x = stride * 0.4;
+      if (sitting) {
+        body.rotation.x = 0.1 + Math.sin(timeSeconds * 2) * 0.018;
+        legs[0].rotation.x = -1.35;
+        legs[1].rotation.x = -1.35;
+        arms[0].rotation.x = -1.15 + Math.sin(timeSeconds * 14) * 0.08;
+        arms[1].rotation.x = -1.15 + Math.cos(timeSeconds * 14) * 0.08;
+      }
     },
     dispose() {
       const geometries = new Set<THREE.BufferGeometry>();

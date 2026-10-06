@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
+import { Billboard, ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { InstancedFurnitureItems } from "../features/retro-office/objects/furniture";
 import type { FurnitureItem } from "../features/retro-office/core/types";
@@ -8,7 +8,7 @@ import {
   createMascotCharacter,
   type MascotCharacter,
 } from "./office/characters/createMascotCharacter";
-import type { CharacterKind, OfficeAgent } from "../types";
+import type { AgentStatus, CharacterKind, OfficeAgent } from "../types";
 
 export const CHARACTERS: {
   kind: CharacterKind;
@@ -53,6 +53,7 @@ export const CHARACTERS: {
     description: "A little heart with a whole lot of build energy.",
   },
 ];
+import { DESKS, agentCharacter, officePose } from "../officeBehavior";
 const noop = () => {};
 function Label({
   text,
@@ -106,12 +107,10 @@ function Furniture() {
         y: (z + 16.2) / 0.018,
         facing,
       });
-    for (const x of [-5.8, -2.1, 1.6]) {
-      for (const z of [-4.4, 3.6]) {
-        add("desk_cubicle", x, z);
-        add("computer", x + 0.25, z + 0.1);
-        add("chair", x + 0.45, z + 1);
-      }
+    for (const { x, z } of DESKS) {
+      add("desk_cubicle", x, z);
+      add("computer", x + 0.25, z + 0.1);
+      add("chair", x + 0.45, z + 1);
     }
     add("couch", 6, -3, 270);
     add("round_table", 6.2, 0.6);
@@ -257,7 +256,7 @@ function Walker({
   selected,
   onSelect,
   label,
-  working,
+  status,
 }: {
   kind: CharacterKind;
   index: number;
@@ -266,11 +265,11 @@ function Walker({
   selected: boolean;
   onSelect: () => void;
   label?: string;
-  working?: boolean;
+  status: AgentStatus | "preview";
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
-  const elapsed = useRef(index * 2.8);
+  const elapsed = useRef(0);
   useEffect(() => {
     const instance = createMascotCharacter(kind);
     mascot.current = instance;
@@ -283,19 +282,18 @@ function Walker({
   }, [kind]);
   useFrame((_, dt) => {
     if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const angle = elapsed.current * 0.14 + (index / total) * Math.PI * 2;
+    const pose = officePose(status, index, elapsed.current, total);
     if (parent.current) {
-      parent.current.position.set(
-        Math.cos(angle) * 6.7 - 1.6,
-        0.1,
-        Math.sin(angle) * 1.18 + 0.55,
-      );
-      parent.current.rotation.y = Math.atan2(
-        -6.7 * Math.sin(angle),
-        1.18 * Math.cos(angle),
+      const target = new THREE.Vector3(pose.x, pose.y, pose.z);
+      const moving = parent.current.position.distanceTo(target) > 0.12;
+      parent.current.position.lerp(target, 1 - Math.exp(-dt * 5));
+      parent.current.rotation.y = pose.facing;
+      mascot.current?.update(
+        elapsed.current,
+        paused ? 0 : pose.walking || moving ? 1 : 0,
+        pose.sitting && !moving,
       );
     }
-    mascot.current?.update(elapsed.current, paused ? 0 : 1);
   });
   return (
     <group
@@ -318,12 +316,14 @@ function Walker({
         </mesh>
       )}
       {label && (
-        <Label
-          text={`${working ? "● " : ""}${label}`}
-          position={[0, 2.35, 0]}
-          width={2.5}
-          height={0.45}
-        />
+        <Billboard position={[0, 2.35, 0]}>
+          <Label
+            text={`${status === "working" ? "● " : ""}${label.length > 34 ? label.slice(0, 34) + "…" : label}`}
+            position={[0, 0, 0]}
+            width={2.5}
+            height={0.45}
+          />
+        </Billboard>
       )}
     </group>
   );
@@ -391,17 +391,13 @@ export default function OfficeWorld({
             id: c.kind,
             kind: c.kind,
             label: undefined,
-            working: false,
+            status: "preview" as const,
           }))
-        : agents.map((a, i) => ({
+        : agents.map((a) => ({
             id: a.id,
-            kind:
-              a.character ??
-              (a.harness.toLowerCase() === "lovable"
-                ? "lovable"
-                : CHARACTERS[i % 5].kind),
+            kind: a.character ?? agentCharacter(a.id, a.model, a.harness),
             label: a.name,
-            working: a.status === "working",
+            status: a.status,
           }))
       ).map((a, i, array) => (
         <Walker

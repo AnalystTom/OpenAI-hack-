@@ -91,3 +91,9 @@ Treat this as a proposed implementation, not an established Codex capability. Ve
 - Document deployment steps, required environment variable names (no values), and any unfinished acceptance criteria for the integration owner.
 
 Before any commit or push, run `/ponytail-review`, address its findings, and never bypass the repository's Ponytail hooks.
+
+## Local implementation now available
+
+The integration workstream added a local-only prototype after the initial handoff. `server/codex-sessions.mjs` reads the local Codex database read-only, scopes it to `~/Dev/Robots`, and returns six recent sessions plus minimal recorded status history. `src/integrations/codex/useRobotsSessions.ts` polls it every five seconds. It is mounted only by the development Vite plugin and protects loopback/origin/host boundaries. No session files are stored in the repository or public bundle.
+
+This does **not** complete the hosted pairing goal. Reuse the pure `parseSessionEvents` parser and `OfficeAgent`/`RecordedActivity` shapes where appropriate; implement the consented hosted transport separately. Optional `history` events contain only `at`, `status`, and a short event `label`. They power a clearly labelled replay, never claims of current work.

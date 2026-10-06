@@ -12,3 +12,13 @@ net: -678 lines applied.
 Follow-up review: Lean already. Ship.
 
 Validation: production build; snapshot parser tests; Playwright fresh-browser office navigation, character selection, pause/resume, day/night, camera reset, empty office, invalid import, mobile overflow check, and rendered screenshot inspection. Live Codex connection remains explicitly unavailable and delegated in the import handoff.
+
+## Local Robots session feed review
+
+1. `src/components/OfficeWorld.tsx`: delete: per-frame `userData` assignment with no consumer. Nothing replaces it. Addressed.
+
+net: -5 lines applied.
+
+Follow-up review: Lean already. Ship.
+
+Validation: production build and eight parser, state-mapping, and local-request-boundary tests. Playwright verified real Robots import, recorded work at a desk, completion returning to idle, connection loss/recovery, and disconnect. The local feed reads session metadata only; hosted pairing remains separate.

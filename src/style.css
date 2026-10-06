@@ -988,3 +988,112 @@ footer > span {
     font-size: 23px;
   }
 }
+.connection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  border: 1px solid #dce4d1;
+  background: #f0f4e9;
+  padding: 11px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+.connection-summary b,
+.connection-summary > span {
+  width: 100%;
+}
+.connection-summary > span {
+  color: #8c9a7d;
+}
+.connection-summary button {
+  border: 0;
+  background: none;
+  padding: 3px 0;
+  font-size: 10px;
+  color: #6f805f;
+  text-decoration: underline;
+}
+.agent-behavior {
+  display: block;
+  padding: 7px 9px;
+  border-radius: 5px;
+  background: #e9eddf;
+  color: #74865d;
+  font-size: 10px;
+  margin: 12px 0;
+}
+.agent-behavior.working {
+  background: #dcebd0;
+  color: #3f6c33;
+}
+.agent-behavior.unknown,
+.agent-behavior.offline {
+  background: #f0e9da;
+  color: #9d7a41;
+}
+.replay-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d2dfc4;
+  background: #eef4e6;
+  padding: 9px;
+  border-radius: 6px;
+  font-size: 10px;
+  margin-top: 15px;
+  width: 100%;
+  justify-content: center;
+}
+.context-note {
+  display: block;
+  margin-top: 10px;
+  line-height: 1.6;
+}
+.connection-banner,
+.replay-banner {
+  position: absolute;
+  top: 62px;
+  left: 25px;
+  z-index: 4;
+  max-width: calc(100% - 50px);
+  background: #f9f9edf2;
+  border: 1px solid #dedfc9;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 11px;
+  color: #7c8769;
+}
+.connection-banner.error {
+  color: #9b513e;
+}
+.replay-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  background: #fff3dfef;
+  color: #957338;
+  right: 25px;
+}
+.replay-banner span {
+  font-size: 10px;
+}
+.replay-banner button {
+  font-size: 10px;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+  color: #8b6b31;
+  margin-left: auto;
+}
+.world:has(.replay-banner) .detail-card {
+  top: 118px;
+}
+.detail-card {
+  max-height: calc(100% - 190px);
+  overflow-y: auto;
+}
+.roster-item small {
+  white-space: normal;
+}

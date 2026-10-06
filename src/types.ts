@@ -8,6 +8,11 @@ export type CharacterKind =
   | "purple-dot"
   | "lovable";
 /** Real source data only. Missing telemetry remains null, never estimated. */
+export interface RecordedActivity {
+  at: string;
+  status: AgentStatus;
+  label: string;
+}
 export interface OfficeAgent {
   id: string;
   name: string;
@@ -20,6 +25,7 @@ export interface OfficeAgent {
   updatedAt: string;
   character?: CharacterKind;
   sourceUrl?: string;
+  history?: RecordedActivity[];
 }
 export interface OfficeSnapshot {
   version: 1;

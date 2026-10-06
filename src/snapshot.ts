@@ -39,6 +39,31 @@ export function parseOfficeSnapshot(text: string): OfficeSnapshot {
       throw new Error(
         "Each agent needs an id, name, harness, valid status, and updatedAt timestamp.",
       );
+    if (a.history !== undefined) {
+      if (!Array.isArray(a.history) || a.history.length > 100)
+        throw new Error("History must contain at most 100 recorded events.");
+      let previous = -Infinity;
+      for (const event of a.history) {
+        const at = typeof event?.at === "string" ? Date.parse(event.at) : NaN;
+        if (
+          !Number.isFinite(at) ||
+          at < previous ||
+          typeof event.label !== "string" ||
+          ![
+            "working",
+            "idle",
+            "blocked",
+            "error",
+            "offline",
+            "unknown",
+          ].includes(event.status)
+        )
+          throw new Error(
+            "Recorded history must have ordered timestamps, labels, and valid states.",
+          );
+        previous = at;
+      }
+    }
     if (ids.has(a.id)) throw new Error("Agent IDs must be unique.");
     ids.add(a.id);
     for (const key of ["model", "task"])
