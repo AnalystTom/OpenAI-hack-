@@ -1,3 +1,4 @@
+import { FirstAidPanel } from "./components/FirstAidPanel";
 import { AgentVitals } from "./components/AgentVitals";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -9,6 +10,7 @@ import {
   Coffee,
   Globe2,
   Heart,
+  HeartPulse,
   Maximize,
   Moon,
   MousePointer2,
@@ -89,6 +91,8 @@ export default function App() {
   const [night, setNight] = useState(false);
   const [cameraKey, setCameraKey] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [firstAid, setFirstAid] = useState(false);
+  const firstAidButton = useRef<HTMLButtonElement>(null);
   const [help, setHelp] = useState(false);
   const [ready, setReady] = useState(false);
   const [studioTab, setStudioTab] = useState<"profile" | "social" | "library" | "projects" | "invite" | null>(null);
@@ -188,9 +192,10 @@ export default function App() {
   const agent = roomAgents.find((a) => a.id === selected);
   const book = visibleBooks.find((item) => item.id === selectedBook);
   const project = visibleProjects.find((item) => item.id === selectedProject);
-  function selectAgent(id: string) { setSelected(id); setSelectedBook(null); setSelectedProject(null); }
-  function selectBook(id: string) { setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
-  function selectProject(id: string) { setSelected(null); setSelectedBook(null); setSelectedProject(id); }
+  function openFirstAid() { setSelected(null); setSelectedBook(null); setSelectedProject(null); setFirstAid(true); }
+  function selectAgent(id: string) { setFirstAid(false); setSelected(id); setSelectedBook(null); setSelectedProject(null); }
+  function selectBook(id: string) { setFirstAid(false); setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
+  function selectProject(id: string) { setFirstAid(false); setSelected(null); setSelectedBook(null); setSelectedProject(id); }
   function leaveGuest() { window.location.hash = ""; setGuest(null); }
   const behavior = (a: OfficeAgent) => linkedPartner(a.id) ? `Working with ${linkedPartner(a.id)!.name}` : agentActivityLabel(a) ?? STATUS_LABELS[a.status];
   function watchLocal(source: string) {
@@ -433,6 +438,7 @@ export default function App() {
             onSelectBook={selectBook}
             onSelectProject={selectProject}
             onInvite={guest ? undefined : () => setStudioTab("invite")}
+            onFirstAid={guest ? undefined : openFirstAid}
             onReady={() => setReady(true)}
           />
           {!guest && !showPreview &&
@@ -520,7 +526,8 @@ export default function App() {
               </small>
             </div>
           )}
-          {(character || agent || book || project) && (
+          {firstAid && !guest && <FirstAidPanel onClose={() => { setFirstAid(false); firstAidButton.current?.focus(); }} />}
+          {!firstAid && (character || agent || book || project) && (
             <div className="detail-card">
               <button
                 className="close"
@@ -605,6 +612,12 @@ export default function App() {
               Drag to explore. Click a little guy.
             </span>
             <div className="world-controls">
+              {!guest && <>
+                <button ref={firstAidButton} aria-label="Open first-aid station" title="First-aid station" onClick={openFirstAid}>
+                  <HeartPulse size={17} />
+                </button>
+                <span />
+              </>}
               <button
                 aria-label={replay && replayElapsed >= replay.durationMs ? (paused ? "Resume animation" : "Pause animation") : (paused ? "Resume office" : "Pause office")}
                 title={replay && replayElapsed >= replay.durationMs ? "Replay finished · control idle animation" : (paused ? "Resume office" : "Pause office")}
