@@ -51,3 +51,15 @@ in the local browser; unavailable pricing now explains missing model/usage rates
 Vitals polish review: one component groups the health badge, counts, cost and
 context display using scoped styles. Native progress and details elements handle
 bar semantics and estimate disclosure. No new dependencies. Lean already. Ship.
+
+## Final main integration review
+
+1. src/App.tsx: reuse: duplicate import modal and file parsing. Use the existing Welcome import and local-source selector. Addressed.
+
+net: -118 lines applied.
+
+Follow-up review: Lean already. Ship.
+
+Final review includes the combined rooms, live links, recorded production example, and import styling. Lean already. Ship.
+
+Validation: production build and 34 tests; fresh Playwright context verified fireworks above visible models, toy hammer pickup/drop, local workspace import with real run health, replay/pause, saved residents after reload, empty collections, default-off sharing, read-only guest entry, mobile overflow, and the production recorded-example entry. Review browser remains open.

@@ -3,12 +3,13 @@ import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Html, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 
-export default function ToyHammer({ held, swingAt, onPickUp, onDrop, onSwing }: {
+export default function ToyHammer({ held, swingAt, onPickUp, onDrop, onSwing, reducedMotion }: {
   held: boolean;
   swingAt: number;
   onPickUp: () => void;
   onDrop: () => void;
   onSwing: () => void;
+  reducedMotion: boolean;
 }) {
   const model = useRef<THREE.Group>(null);
   const { gl } = useThree();
@@ -36,9 +37,9 @@ export default function ToyHammer({ held, swingAt, onPickUp, onDrop, onSwing }: 
       ray.setFromCamera(pointer, camera);
       if (ray.ray.intersectPlane(plane, point)) model.current.position.copy(point);
       const age = (performance.now() - swingAt) / 1000;
-      model.current.rotation.set(0, Math.PI / 4, age >= 0 && age < 0.32 ? -Math.sin(age / 0.32 * Math.PI) * 1.4 : -0.2);
+      model.current.rotation.set(0, Math.PI / 4, !reducedMotion && age >= 0 && age < 0.32 ? -Math.sin(age / 0.32 * Math.PI) * 1.4 : -0.2);
     } else {
-      model.current.position.set(3.8, 0.5, 5.2);
+      model.current.position.set(0, 0.5, 6.4);
       model.current.rotation.set(Math.PI / 2, 0, 0);
     }
   });
@@ -47,7 +48,7 @@ export default function ToyHammer({ held, swingAt, onPickUp, onDrop, onSwing }: 
     event.stopPropagation();
     onPickUp();
   }
-  return <group ref={model} name="Toy hammer" position={[3.8, 0.5, 5.2]} onPointerDown={pickUp}>
+  return <group ref={model} name="Toy hammer" position={[0, 0.5, 6.4]} onPointerDown={pickUp}>
     <RoundedBox name="Rubber hammer head" args={[1.65, 0.72, 0.72]} radius={0.17} smoothness={4} castShadow raycast={raycast}>
       <meshStandardMaterial color="#ee64a6" roughness={0.5} />
     </RoundedBox>

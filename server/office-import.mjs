@@ -42,7 +42,7 @@ export function createOfficeImportHandler({ now = Date.now } = {}) {
       }
       const parsed = parseOfficeSnapshot(Buffer.concat(chunks).toString("utf8"));
       // Allowlist stored fields; never retain arbitrary uploaded archive fields.
-      const snapshot = JSON.parse(serializeOffice(parsed.agents));
+      const snapshot = JSON.parse(serializeOffice(parsed.agents, parsed.interactions));
       if (entry.snapshot && JSON.stringify(entry.snapshot) !== JSON.stringify(snapshot))
         return send(409, { error: "This prompt already received a snapshot. Create a new prompt to import again." });
       entry.snapshot = snapshot;

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Copy, FileUp, Play, RefreshCw, X } from "lucide-react";
-import type { OfficeAgent, OfficeSnapshot } from "../../types";
+import type { AgentInteraction, OfficeAgent, OfficeSnapshot } from "../../types";
 import { parseOfficeSnapshot } from "../../snapshot";
 import { importPrompt, type ImportPairing } from "../../integrations/codex/importPrompt";
 import "./welcome.css";
 
 export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
-  onImport: (agents: OfficeAgent[]) => void;
+  onImport: (agents: OfficeAgent[], interactions?: AgentInteraction[]) => void;
   onExplore: () => void;
   existingCount?: number;
 }) {
@@ -20,6 +20,7 @@ export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const fileInput = useRef<HTMLInputElement>(null);
   const promptInput = useRef<HTMLTextAreaElement>(null);
+  const promptDetails = useRef<HTMLDetailsElement>(null);
   const received = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
       setCopied(true);
       setError("");
     } catch {
+      if (promptDetails.current) promptDetails.current.open = true;
       promptInput.current?.focus();
       promptInput.current?.select();
       setError("Clipboard unavailable. The prompt is selected; copy it with your keyboard.");
@@ -112,8 +114,7 @@ export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
         <section className="welcome-card" aria-label="Import your Codex sessions">
           <button className="welcome-close" aria-label="Close import" onClick={onExplore}><X size={18} /></button>
           {snapshot ? <>
-            <span className="welcome-card-icon"><Check size={24} /></span>
-            <div className="eyebrow">YOUR SNAPSHOT HAS ARRIVED</div>
+            <div className="welcome-heading"><span className="welcome-card-icon"><Check size={20} /></span><span className="eyebrow">SNAPSHOT RECEIVED</span></div>
             <h2 id="welcome-title">{snapshot.agents.length ? "Meet your little coworkers." : "No sessions in this snapshot."}</h2>
             <p>{snapshot.agents.length ? "Selected agents join this world. Existing agents stay here; matching session IDs are updated." : "Try another project or export a new snapshot from Codex."}</p>
             <div className="import-selection">
@@ -124,24 +125,24 @@ export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
                 <span><b>{agent.name}</b><small>{agent.history?.length ? `${agent.history.length} recorded events` : "No recorded timeline"} · {agent.model ?? "Model not reported"}</small></span>
               </label>)}
             </div>
-            <button className="import-button welcome-primary" disabled={!selected.size} onClick={() => { try { onImport(snapshot.agents.filter((a) => selected.has(a.id))); } catch (e) { setError(e instanceof Error ? e.message : "Unable to add agents."); } }}><Play size={16} /> Add to this world <span>{selected.size}</span></button>
-            <button className="text-button" onClick={() => { setSnapshot(null); setError(""); setAttempt((n) => n + 1); }}>Import another snapshot <RefreshCw size={13} /></button>
+            <button className="welcome-action welcome-primary" disabled={!selected.size} onClick={() => { try { onImport(snapshot.agents.filter((a) => selected.has(a.id)), snapshot.interactions?.filter((link) => selected.has(link.fromId) && selected.has(link.toId))); } catch (e) { setError(e instanceof Error ? e.message : "Unable to add agents."); } }}><Play size={16} /> Add to this world <span>{selected.size}</span></button>
+            <button className="welcome-action" onClick={() => { setSnapshot(null); setError(""); setAttempt((n) => n + 1); }}>Import another snapshot <RefreshCw size={13} /></button>
           </> : <>
-            <span className="welcome-card-icon">⌘</span>
-            <div className="eyebrow">START WITH YOUR CODEX</div>
-            <h2 id="welcome-title">One prompt. A whole little team.</h2>
-            <p>Bring your Codex agents into the world behind this card. Paste the prompt into Codex on the computer where you work.</p>
+            <div className="welcome-heading"><span className="welcome-card-icon">⌘</span><span className="eyebrow">BRING YOUR CODEX</span></div>
+            <h2 id="welcome-title">Your agents. One little office.</h2>
+            <p>Copy the prompt into Codex to bring your sessions here.</p>
             {existingCount > 0 && <p className="existing-office">{existingCount} imported {existingCount === 1 ? "agent already lives" : "agents already live"} here. New imports join them.</p>}
-            <label className="project-label" htmlFor="import-project">Which project should Codex look at? <small>Optional</small></label>
+            <label className="project-label" htmlFor="import-project">Project <small>Optional</small></label>
             <input id="import-project" className="project-input" value={project} onChange={(e) => { setProject(e.target.value); setCopied(false); }} />
             <small className="project-hint">Leave blank and Codex will ask you.</small>
-            <div className="prompt-box"><div><span>YOUR CODEX PROMPT</span><span>Read-only export</span></div><textarea ref={promptInput} aria-label="Codex import prompt" readOnly value={prompt} spellCheck={false} /></div>
-            <button className="import-button welcome-primary" onClick={copyPrompt} disabled={connection === "Preparing your import…"}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? "Prompt copied — paste into Codex" : "Copy prompt for Codex"}<ArrowRight size={16} /></button>
+            <details className="prompt-box" ref={promptDetails}><summary>Preview prompt <span>Read-only export</span></summary><textarea ref={promptInput} aria-label="Codex import prompt" readOnly value={prompt} spellCheck={false} /></details>
+            <button className="welcome-action welcome-primary" onClick={copyPrompt} disabled={connection === "Preparing your import…"}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? "Copied — paste into Codex" : "Copy prompt for Codex"}<ArrowRight size={16} /></button>
             <p className="import-status" role="status"><span className="footer-dot" />{connection}</p>
-            {import.meta.env.DEV && !pairing && connection !== "Preparing your import…" && <button className="text-button" onClick={() => setAttempt((n) => n + 1)}>Create a new upload prompt <RefreshCw size={13} /></button>}
-            <div className="welcome-divider"><span>Already have your snapshot?</span></div>
-            <button className="file-import" onClick={() => fileInput.current?.click()}><FileUp size={19} /><span><b>Import snapshot file</b><small>JSON · up to 2 MB · saved in this browser</small></span><ArrowRight size={16} /></button>
-            <p className="welcome-privacy">Session titles, task labels, status, timestamps and available model/context metadata. No credentials, file contents or full conversation logs.</p>
+            {import.meta.env.DEV && !pairing && connection !== "Preparing your import…" && <button className="welcome-action" onClick={() => setAttempt((n) => n + 1)}>Retry upload connection <RefreshCw size={13} /></button>}
+            <div className="welcome-divider"><span>or import a saved snapshot</span></div>
+            <button className="welcome-action" onClick={() => fileInput.current?.click()}><FileUp size={16} />Import snapshot file<ArrowRight size={16} /></button>
+            <small className="welcome-file-hint">JSON · up to 2 MB · saved in this browser</small>
+            <p className="welcome-privacy">Only session metadata and activity. No credentials, file contents or full conversation logs.</p>
           </>}
           <input ref={fileInput} type="file" aria-label="Snapshot file" accept=".json,application/json" hidden onChange={async (event) => {
             const file = event.target.files?.[0]; event.target.value = "";
@@ -152,7 +153,7 @@ export default function Welcome({ onImport, onExplore, existingCount = 0 }: {
             } catch (e) { setError(e instanceof Error ? e.message : "Unable to read snapshot."); }
           }} />
           {error && <p className="welcome-error" role="alert">{error}</p>}
-          <button className="welcome-skip" onClick={onExplore}>I just want to see the app <ArrowRight size={16} /></button>
+          <button className="welcome-action welcome-skip" onClick={onExplore}>Explore the office <ArrowRight size={16} /></button>
         </section>
     </dialog>
   );

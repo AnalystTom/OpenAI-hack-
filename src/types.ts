@@ -39,7 +39,15 @@ export interface OfficeAgent {
   health?: RunHealth;
   cost?: { estimatedUSD: number | null; observedRequests: number; unpricedRequests: number; assumedModelRequests: number };
 }
+/** A recorded link between two sessions; message contents are never included. */
+export interface AgentInteraction {
+  fromId: string;
+  toId: string;
+  at: string;
+  kind: "delegation" | "message";
+}
 export interface OfficeSnapshot {
   version: 1;
   agents: OfficeAgent[];
+  interactions?: AgentInteraction[];
 }

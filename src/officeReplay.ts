@@ -22,6 +22,7 @@ export function appendOfficeReplay(replay: OfficeReplay, incoming: OfficeAgent[]
 export function agentActivityLabel(agent: OfficeAgent): string | undefined {
   if (agent.playback?.state === "finished") return "Task wrapped up";
   if (agent.status !== "working") return undefined;
+  if (agent.health?.retrying) return "Retrying a failed step";
   const activity = agent.playback?.label ?? agent.activityLabel;
   if (activity && activity !== "Task started" && !/^Using\b/.test(activity)) return activity;
   const task = agent.task ?? agent.name;
@@ -89,6 +90,8 @@ export function officeSummary(
   const unknown = agents.length - working - idle - attention;
   const prefix = recorded ? "Replay · " : "";
   if (attention) return `${prefix}Plot twist: ${attention} ${attention === 1 ? "agent needs" : "agents need"} help. ${working} working; ${idle} waiting${unknown ? `; ${unknown} unconfirmed` : ""}.`;
+  const retrying = agents.filter((a) => a.status === "working" && a.health?.retrying).length;
+  if (retrying) return `${prefix}${retrying} ${retrying === 1 ? "agent is" : "agents are"} taking another lap: retrying a failed step. ${working} working; ${idle} waiting${unknown ? `; ${unknown} unconfirmed` : ""}.`;
   if (unknown) return `${prefix}${working} ${working === 1 ? "agent is" : "agents are"} working; ${idle} waiting; ${unknown} unconfirmed. Even tiny coworkers need a signal.`;
   if (!working) return `${prefix}Coffee-break energy. ${idle} ${idle === 1 ? "agent is" : "agents are"} taking it easy, waiting for a task.`;
   if (!idle) return `${prefix}All hands on keyboards: ${working} ${working === 1 ? "agent is" : "agents are"} working. Zero meetings required.`;

@@ -1,10 +1,9 @@
 import { AgentVitals } from "./components/AgentVitals";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowUpRight,
   Box,
-  Check,
   ChevronRight,
   CircleHelp,
   Coffee,
@@ -12,6 +11,8 @@ import {
   Maximize,
   Moon,
   MousePointer2,
+  BookOpen,
+  Palette,
   Pause,
   Play,
   RotateCcw,
@@ -21,8 +22,7 @@ import {
   X,
 } from "lucide-react";
 import OfficeWorld, { CHARACTERS } from "./components/OfficeWorld";
-import type { OfficeAgent } from "./types";
-import { parseOfficeSnapshot } from "./snapshot";
+import type { AgentInteraction, OfficeAgent } from "./types";
 import {
   createOfficeReplay,
   appendOfficeReplay,
@@ -32,36 +32,89 @@ import {
   replayClockLabel,
   type OfficeReplay,
 } from "./officeReplay";
-import { agentCharacter, STATUS_LABELS } from "./officeBehavior";
+import { agentCharacter, STATUS_LABELS, liveInteractions } from "./officeBehavior";
 import { useRobotsSessions } from "./integrations/codex/useRobotsSessions";
 import Welcome from "./components/import/Welcome";
 import { mergeOfficeAgents, readSavedOffice, serializeOffice, OFFICE_STORAGE_KEY, ENTERED_STORAGE_KEY } from "./officeStore";
+
+import RoomStudio from "./components/RoomStudio";
+import projectExampleSource from "./data/project-example.json";
+import { parseOfficeSnapshot } from "./snapshot";
+import {
+  DEFAULT_SHARE, EMPTY_PROFILE, EMPTY_STATS, readGuestRoom,
+  type GuestRoom, type KnowledgeBook, type RoomProfile, type RoomProject,
+  type RoomStats, type ShareOptions,
+} from "./socialRoom";
+
+function readRoomDraft() {
+  try {
+    const raw = localStorage.getItem("dots-room-draft-v1");
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object") return null;
+    const validTheme = ["studio", "grove", "coastal", "cosmic"].includes(value.profile?.theme);
+    return {
+      profile: validTheme && typeof value.profile?.displayName === "string" && typeof value.profile?.socialUrl === "string" && typeof value.profile?.interests === "string" ? value.profile as RoomProfile : EMPTY_PROFILE,
+      books: Array.isArray(value.books) ? value.books.filter((book: KnowledgeBook) => book && typeof book.id === "string" && typeof book.title === "string" && typeof book.summary === "string").slice(0, 8) as KnowledgeBook[] : [],
+      projects: Array.isArray(value.projects) ? value.projects.filter((project: RoomProject) => project && typeof project.id === "string" && typeof project.title === "string" && typeof project.url === "string").slice(0, 8) as RoomProject[] : [],
+      stats: value.stats && typeof value.stats === "object" ? { ...EMPTY_STATS, ...value.stats, agentTotals: value.stats.agentTotals && typeof value.stats.agentTotals === "object" ? value.stats.agentTotals : {} } as RoomStats : EMPTY_STATS,
+      share: value.share && typeof value.share === "object" ? { ...DEFAULT_SHARE, ...value.share } as ShareOptions : DEFAULT_SHARE,
+    };
+  } catch { return null; }
+}
+const roomDraft = readRoomDraft();
+const projectExample = parseOfficeSnapshot(JSON.stringify(projectExampleSource));
 
 export default function App() {
   const [saved] = useState(() => {
     try { return readSavedOffice(localStorage); }
     catch { return { agents: [], error: "Browser storage is unavailable. Your office cannot be saved on this device." }; }
   });
+  const showProjectExampleInitially = import.meta.env.PROD && !saved.agents.length && !window.location.hash && projectExample.agents.length > 0;
   const [welcome, setWelcome] = useState(() => {
+    if (showProjectExampleInitially) return false;
     try { return localStorage.getItem(ENTERED_STORAGE_KEY) !== "yes"; } catch { return true; }
   });
   const [agents, setAgents] = useState<OfficeAgent[]>(saved.agents);
   const agentsRef = useRef(agents);
+  const showProjectExample = showProjectExampleInitially && agents.length === 0;
   const [officeError, setOfficeError] = useState(saved.error);
+  const [interactions, setInteractions] = useState<AgentInteraction[]>(() => showProjectExampleInitially ? projectExample.interactions ?? [] : []);
+  const [interactionClock, setInteractionClock] = useState(Date.now());
   const [preview, setPreview] = useState(
-    () => !saved.agents.length && sessionStorage.getItem("dots-robots-connected") !== "yes",
+    () => !showProjectExampleInitially && !saved.agents.length && sessionStorage.getItem("dots-robots-connected") !== "yes",
   );
   const [paused, setPaused] = useState(false);
   const [night, setNight] = useState(false);
   const [cameraKey, setCameraKey] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [modal, setModal] = useState(false);
   const [help, setHelp] = useState(false);
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
-  const input = useRef<HTMLInputElement>(null);
+  const [studioTab, setStudioTab] = useState<"profile" | "library" | "projects" | "invite" | null>(null);
+  const [profile, setProfile] = useState<RoomProfile>(roomDraft?.profile ?? EMPTY_PROFILE);
+  const [books, setBooks] = useState<KnowledgeBook[]>(roomDraft?.books ?? []);
+  const [projects, setProjects] = useState<RoomProject[]>(roomDraft?.projects ?? []);
+  const [stats, setStats] = useState<RoomStats>(roomDraft?.stats ?? EMPTY_STATS);
+  const [share, setShare] = useState<ShareOptions>(roomDraft?.share ?? DEFAULT_SHARE);
+  const [guest, setGuest] = useState<GuestRoom | null>(() => readGuestRoom(window.location.hash));
+  const [selectedBook, setSelectedBook] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [openedBooks, setOpenedBooks] = useState<string[]>([]);
+  useEffect(() => {
+    try { localStorage.setItem("dots-room-draft-v1", JSON.stringify({ profile, books, projects, stats, share })); }
+    catch { /* The current room remains usable when browser storage is unavailable. */ }
+  }, [profile, books, projects, stats, share]);
+  useEffect(() => {
+    const update = () => { setGuest(readGuestRoom(window.location.hash)); setSelected(null); setSelectedBook(null); setSelectedProject(null); setOpenedBooks([]); };
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
   const office = useRef<HTMLDivElement>(null);
-  const character = CHARACTERS.find((c) => c.kind === selected);
+  const showPreview = !guest && preview;
+  const visibleProfile = guest?.profile ?? profile;
+  const visibleBooks = guest?.books ?? books;
+  const visibleProjects = guest?.projects ?? projects;
+  const character = !guest ? CHARACTERS.find((c) => c.kind === selected) : undefined;
   function addAgents(incoming: OfficeAgent[]) {
     const merged = mergeOfficeAgents(agentsRef.current, incoming);
     try { localStorage.setItem(OFFICE_STORAGE_KEY, serializeOffice(merged)); }
@@ -76,15 +129,19 @@ export default function App() {
     try { localStorage.setItem(ENTERED_STORAGE_KEY, "yes"); }
     catch { setOfficeError("Browser storage is unavailable. The welcome card will reappear on refresh."); }
   }
-  const local = useRobotsSessions((incoming) => {
+  const local = useRobotsSessions((snapshot) => {
+    autoStartReplay.current = false;
+    setInteractions(snapshot.interactions ?? []);
+    setInteractionClock(Date.now());
+    const incoming = snapshot.agents;
     if (!incoming.length) return;
     try { addAgents(incoming); } catch (e) { setOfficeError(e instanceof Error ? e.message : "Unable to save office."); }
   });
-  const [replay, setReplay] = useState<OfficeReplay | null>(null);
+  const [replay, setReplay] = useState<OfficeReplay | null>(() => showProjectExampleInitially ? createOfficeReplay(projectExample.agents) : null);
   const [replayElapsed, setReplayElapsed] = useState(0);
   const [replaySpeed, setReplaySpeed] = useState(10);
   const autoStartReplay = useRef(true);
-  function startOfficeReplay(source = agents) {
+  function startOfficeReplay(source = showProjectExample ? projectExample.agents : agents) {
     setReplay(createOfficeReplay(source));
     setReplayElapsed(0);
     setPaused(false);
@@ -109,22 +166,32 @@ export default function App() {
   }, [replay, paused, replaySpeed, replayElapsed >= (replay?.durationMs ?? 0)]);
   const visibleAgents = replay
     ? replayOffice(replay, replayElapsed)
-    : agents.map((a) =>
+    : (showProjectExample ? projectExample.agents : agents).map((a) =>
         local.enabled && local.state === "error"
           ? { ...a, status: "offline" as const }
           : a,
       );
   const summary = officeSummary(visibleAgents, !!replay);
-  const agent = visibleAgents.find((a) => a.id === selected);
-  const behavior = (a: OfficeAgent) => agentActivityLabel(a) ?? STATUS_LABELS[a.status];
-  function connectRobots() {
-    autoStartReplay.current = true;
-    setReplay(null);
-    setSelected(null);
-    setPreview(false);
-    setModal(false);
-    local.connect();
-  }
+  useEffect(() => {
+    if (!interactions.length) return;
+    const timer = setInterval(() => setInteractionClock(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, [interactions.length]);
+  const roomAgents = guest?.agents ?? visibleAgents;
+  const activeLinks = guest || showPreview || replay || (local.enabled && local.state !== "connected")
+    ? [] : liveInteractions(roomAgents, interactions, interactionClock);
+  const linkedPartner = (id: string) => {
+    const link = activeLinks.find((item) => item.fromId === id || item.toId === id);
+    return link && roomAgents.find((item) => item.id === (link.fromId === id ? link.toId : link.fromId));
+  };
+  const agent = roomAgents.find((a) => a.id === selected);
+  const book = visibleBooks.find((item) => item.id === selectedBook);
+  const project = visibleProjects.find((item) => item.id === selectedProject);
+  function selectAgent(id: string) { setSelected(id); setSelectedBook(null); setSelectedProject(null); }
+  function selectBook(id: string) { setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
+  function selectProject(id: string) { setSelected(null); setSelectedBook(null); setSelectedProject(id); }
+  function leaveGuest() { window.location.hash = ""; setGuest(null); }
+  const behavior = (a: OfficeAgent) => linkedPartner(a.id) ? `Working with ${linkedPartner(a.id)!.name}` : agentActivityLabel(a) ?? STATUS_LABELS[a.status];
   function watchLocal(source: string) {
     autoStartReplay.current = false;
     setReplay(null);
@@ -135,29 +202,6 @@ export default function App() {
     local.connect(source);
   }
 
-  async function importFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      if (file.size > 2_000_000)
-        throw new Error("Choose a snapshot smaller than 2 MB.");
-      const snapshot = parseOfficeSnapshot(await file.text());
-      local.disconnect();
-      autoStartReplay.current = false;
-      const merged = addAgents(snapshot.agents);
-      if (replay) setReplay(appendOfficeReplay(replay, snapshot.agents, replayElapsed));
-      else startOfficeReplay(merged);
-      setPreview(false);
-      setSelected(null);
-      setModal(false);
-      setError("");
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Unable to read this snapshot.",
-      );
-    }
-    event.target.value = "";
-  }
   function switchView(value: boolean) {
     setPreview(value);
     setSelected(null);
@@ -178,7 +222,7 @@ export default function App() {
         <span className="office-name">
           The little office <span>HQ</span>
         </span>
-        <nav aria-label="Office views">
+        {guest ? <nav aria-label="Shared room"><span className="guest-nav-label">Visiting {guest.profile.displayName}</span><button onClick={leaveGuest}>Back to my room</button></nav> : <nav aria-label="Office views">
           <button
             className={preview ? "active" : ""}
             onClick={() => switchView(true)}
@@ -191,38 +235,31 @@ export default function App() {
             onClick={() => switchView(false)}
           >
             <Users size={15} />
-            Your agents {agents.length > 0 && <small>{agents.length}</small>}
+            Your agents {roomAgents.length > 0 && <small>{roomAgents.length}</small>}
           </button>
-        </nav>
-        <button className="import-button" onClick={() => setWelcome(true)}>
-          <ArrowDownToLine size={15} />
-          Import agents
-        </button>
+        </nav>}
+        <div className="topbar-actions">
+          {!guest && <button className="studio-button" onClick={() => setStudioTab("profile")}><Palette size={15} /> Room studio</button>}
+          {!guest && <button className="import-button" onClick={() => setWelcome(true)}><ArrowDownToLine size={15} /> Import agents</button>}
+        </div>
       </header>
       <main>
-        <aside className="sidebar">
-          <div className="eyebrow">
-            <span /> A NEW WAY TO WORK
-          </div>
-          <h1>
-            Big ideas.
-            <br />
-            Little coworkers<span>.</span>
-          </h1>
-          <p className="intro">
-            Your AI team deserves more than another browser tab.
-          </p>
+        <aside className={`sidebar ${guest ? "guest-sidebar" : ""}`}>
+          <div className="eyebrow"><span /> {guest ? "FRIEND'S ROOM" : "A NEW WAY TO WORK"}</div>
+          <h1>{guest ? guest.profile.displayName : profile.displayName === "My room" ? <>Big ideas.<br />Little coworkers<span>.</span></> : <>{profile.displayName}<span>.</span></>}</h1>
+          <p className="intro">{guest ? "A shared snapshot of this friend's agent world." : profile.interests || "Your AI team deserves more than another browser tab."}</p>
+          {visibleProfile.socialUrl && <a className="social-link" href={visibleProfile.socialUrl} target="_blank" rel="noreferrer">View social profile <ArrowUpRight size={12} /></a>}
           <div className="section-heading">
-            {preview ? "MEET THE LITTLE GUYS" : "YOUR OFFICE"}
-            <span>{preview ? CHARACTERS.length : agents.length}</span>
+            {showPreview ? "MEET THE LITTLE GUYS" : guest ? "SHARED AGENTS" : "YOUR OFFICE"}
+            <span>{showPreview ? CHARACTERS.length : roomAgents.length}</span>
           </div>
-          {preview ? (
+          {showPreview ? (
             <div className="roster">
               {CHARACTERS.map((c) => (
                 <button
                   key={c.kind}
                   className={`roster-item ${selected === c.kind ? "selected" : ""}`}
-                  onClick={() => setSelected(c.kind)}
+                  onClick={() => selectAgent(c.kind)}
                 >
                   <span
                     className={`avatar ${c.kind}`}
@@ -246,13 +283,13 @@ export default function App() {
                 </button>
               ))}
             </div>
-          ) : agents.length ? (
+          ) : roomAgents.length ? (
             <div className="roster">
-              {visibleAgents.map((a) => (
+              {roomAgents.map((a) => (
                 <button
                   className={`roster-item ${selected === a.id ? "selected" : ""}`}
                   key={a.id}
-                  onClick={() => setSelected(a.id)}
+                  onClick={() => selectAgent(a.id)}
                 >
                   <span
                     className="avatar"
@@ -280,31 +317,33 @@ export default function App() {
           ) : (
             <div className="empty-team">
               <Users size={25} />
-              <h3>Room for your team</h3>
-              <p>
-                Import a real agent snapshot to bring your own coworkers into
-                the office.
-              </p>
-              <button onClick={() => setModal(true)}>
-                Bring your agents <ArrowUpRight size={14} />
-              </button>
+              <h3>{guest ? "No agents shared" : "Room for your team"}</h3>
+              <p>{guest ? "This invitation did not include agent sessions." : "Import a real agent snapshot to bring your own coworkers into the office."}</p>
+              {!guest && <button onClick={() => setWelcome(true)}>Bring your agents <ArrowUpRight size={14} /></button>}
             </div>
           )}
+          <div className="room-collections">
+            <button onClick={() => guest ? visibleBooks[0] && selectBook(visibleBooks[0].id) : setStudioTab("library")}><BookOpen size={15} /><span>Learning library</span><b>{visibleBooks.length}</b></button>
+            {visibleBooks.length > 0 && <small>{openedBooks.filter((id) => visibleBooks.some((item) => item.id === id)).length} of {visibleBooks.length} books explored</small>}
+            <button onClick={() => guest ? visibleProjects[0] && selectProject(visibleProjects[0].id) : setStudioTab("projects")}><Sparkles size={15} /><span>Project wall</span><b>{visibleProjects.length}</b></button>
+          </div>
+          {guest?.stats && <div className="friend-stats"><b>Shared totals</b><span>Tokens <strong>{guest.stats.totalTokens === null ? "Not shared" : guest.stats.totalTokens.toLocaleString()}</strong></span><span>Spend <strong>{guest.stats.totalSpend === null ? "Not shared" : `${guest.stats.currency} ${guest.stats.totalSpend.toFixed(2)}`}</strong></span><small>Owner-entered snapshot</small></div>}
           <div className="sidebar-bottom">
-            {import.meta.env.DEV && <div className="local-source-controls">
+            {!guest && import.meta.env.DEV && <div className="local-source-controls">
               <label htmlFor="local-source">Watch local Codex sessions</label>
               <select id="local-source" value={local.enabled ? local.source : ""} onChange={(e) => watchLocal(e.target.value)}>
                 <option value="" disabled>Choose a source</option>
+                <option value="workspace">Current workspace</option>
                 <option value="robots">Robots sessions</option>
                 <option value="demo">Six Luna demo sessions</option>
                 <option value="design">Design Codex session replay</option>
               </select>
               {local.enabled && <button onClick={() => { setReplay(null); setPaused(false); }}>Watch live status</button>}
             </div>}
-            {local.enabled && (
+            {!guest && local.enabled && (
               <div className="connection-summary">
                 <b>
-                  {local.source === "robots" ? "Robots" : local.source === "demo" ? "Luna demo" : "Design session"} ·{" "}
+                  {local.project || "Codex"} ·{" "}
                   {local.state === "connected" ? "local feed" : local.state}
                 </b>
                 <span>
@@ -316,6 +355,7 @@ export default function App() {
                     local.disconnect();
                     setReplay(null);
                     // Disconnecting the feed keeps the saved residents.
+                    setInteractions([]);
                   }}
                 >
                   Disconnect
@@ -326,14 +366,14 @@ export default function App() {
             <div className="coffee-note">
               <Coffee size={18} />
               <p>
-                {preview
+                {showPreview
                   ? "No meetings. Just little guys."
-                  : "A window into your team."}
+                  : guest ? "A friend's shared world." : "A window into your team."}
                 <small>
-                  {preview
+                  {showPreview
                     ? "Character preview · no live agent activity"
-                    : local.enabled
-                      ? "Visualising session events · refreshed every 5s"
+                    : guest ? "Read-only invitation snapshot" : local.enabled
+                      ? "Recorded status and links · refreshed every 5s"
                       : "Imported snapshots are not live connections."}
                 </small>
               </p>
@@ -348,15 +388,15 @@ export default function App() {
           <div className="world-top">
             <div className="world-caption">
               <span className="live-dot" />
-              {preview
+              {showPreview
                 ? "CHARACTER PLAYGROUND"
-                : replay
+                : guest ? "FRIEND'S ROOM" : replay
                   ? "RECORDED TASK REPLAY"
                   : "YOUR AGENT OFFICE"}
               <span className="mode-label">
-                {preview
+                {showPreview
                   ? "Preview"
-                  : replay
+                  : guest ? "Shared snapshot" : replay
                     ? "Replay"
                     : local.enabled
                       ? local.state === "connected"
@@ -373,17 +413,27 @@ export default function App() {
               <CircleHelp size={18} />
             </button>
           </div>
+          {officeError && !guest && <p className="office-error" role="alert">{officeError}</p>}
           <OfficeWorld
-            agents={visibleAgents}
-            preview={preview}
+            agents={roomAgents}
+            interactions={activeLinks}
+            preview={showPreview}
             paused={paused}
             night={night}
             cameraKey={cameraKey}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={selectAgent}
+            profile={visibleProfile}
+            books={visibleBooks}
+            projects={visibleProjects}
+            selectedBook={selectedBook}
+            selectedProject={selectedProject}
+            onSelectBook={selectBook}
+            onSelectProject={selectProject}
+            onInvite={guest ? undefined : () => setStudioTab("invite")}
             onReady={() => setReady(true)}
           />
-          {!preview &&
+          {!guest && !showPreview &&
             local.enabled &&
             local.state === "loading" &&
             !agents.length && (
@@ -391,14 +441,15 @@ export default function App() {
                 Reading your Codex sessions…
               </div>
             )}
-          {!preview && !replay && local.error && (
+          {!guest && !showPreview && !replay && local.error && (
             <div className="connection-banner error" role="alert">
               {local.error}
             </div>
           )}
-          {!preview && replay && (
+          {!guest && !showPreview && replay && (
             <div className="replay-banner" role="status">
-              <b>Parallel session replay</b>
+              <b>{showProjectExample ? "Real project session example" : "Parallel session replay"}</b>
+              {showProjectExample && <span>{projectExample.agents.length} local Codex recordings · task titles, models, timestamps, and coarse activity labels</span>}
               <span className="replay-clock">
                 T+{replayClockLabel(replayElapsed)} · aligned task starts
               </span>
@@ -422,24 +473,34 @@ export default function App() {
               </button>
             </div>
           )}
-          {!preview && visibleAgents.length > 0 && (
+          {!guest && !showPreview && visibleAgents.length > 0 && (
             <section className="office-summary" aria-label="Office summary">
               <span>{replay ? "REPLAY" : "IN THE OFFICE"}</span>
               <p>{summary}</p>
             </section>
           )}
-          {!preview && !replay && visibleAgents.some((a) => (a.history?.length ?? 0) > 1) && (
+          {!guest && !showPreview && !replay && visibleAgents.some((a) => (a.history?.length ?? 0) > 1) && (
             <button className="replay-entry" onClick={() => startOfficeReplay()}>Replay all sessions together</button>
           )}
+          {activeLinks.length > 0 && <div className="collaboration-banner" role="status">
+            <b>Recent session link</b>
+            {activeLinks.map((link) => {
+              const from = roomAgents.find((item) => item.id === link.fromId);
+              const to = roomAgents.find((item) => item.id === link.toId);
+              return <button key={`${link.fromId}-${link.toId}`} onClick={() => selectAgent(link.fromId)}>
+                {from?.name} + {to?.name} · {link.kind === "delegation" ? "delegation" : "message call"}
+              </button>;
+            })}
+          </div>}
           {!ready && <div className="loading-state">Opening the office…</div>}
-          {!preview && !agents.length && (
+          {!guest && !showPreview && !roomAgents.length && (
             <div className="world-empty">
               <span className="empty-icon">
                 <Users size={22} />
               </span>
               <h2>Your team belongs here.</h2>
               <p>Connect the dots. Start with your agents.</p>
-              <button className="import-button" onClick={() => setModal(true)}>
+              <button className="import-button" onClick={() => setWelcome(true)}>
                 Import agents <ArrowUpRight size={15} />
               </button>
             </div>
@@ -453,29 +514,33 @@ export default function App() {
                 to send their character to a desk. Escape or right-click puts it down.
               </p>
               <small>
-                Movement in the playground is animation, not agent activity.
+                Live positions follow recorded session state. Play appears only after a recent recorded link between two working sessions.
               </small>
             </div>
           )}
-          {(character || agent) && (
+          {(character || agent || book || project) && (
             <div className="detail-card">
               <button
                 className="close"
                 aria-label="Close details"
-                onClick={() => setSelected(null)}
+                onClick={() => { setSelected(null); setSelectedBook(null); setSelectedProject(null); }}
               >
                 <X size={16} />
               </button>
               <span className="eyebrow">
-                {character ? "CHARACTER STUDIO" : agent?.harness}
+                {book ? "LEARNING BOOK" : project ? "PROJECT WALL" : character ? "CHARACTER STUDIO" : agent?.harness}
               </span>
-              <h2>{character?.name ?? agent?.name}</h2>
+              <h2>{book?.title ?? project?.title ?? character?.name ?? agent?.name}</h2>
+              {book && <><p>{book.summary}</p>{book.sessionId && !guest && <small>Linked to {agents.find((item) => item.id === book.sessionId)?.name ?? "a session"}</small>}<span className="detail-tag"><BookOpen size={12} /> {openedBooks.length} of {visibleBooks.length} books explored</span></>}
+              {project && <><p>A project pinned to this room.</p>{project.url && <a className="detail-link" href={project.url} target="_blank" rel="noreferrer">Open project <ArrowUpRight size={13} /></a>}</>}
+              {!book && !project && <>
               {agent && (
                 <span className={`agent-behavior ${agent.status}`}>
                   {behavior(agent)}
                   {replay ? " · recorded replay" : ""}
                 </span>
               )}
+              {agent && linkedPartner(agent.id) && <small>Recent recorded session link with {linkedPartner(agent.id)!.name}. The play animation shows that link, not message contents.</small>}
               {agent && (
                 <small>
                   {agent.status === "working"
@@ -504,6 +569,7 @@ export default function App() {
                         <dt>Model</dt>
                         <dd>{agent.model ?? "Not reported"}</dd>
                       </div>
+                      {guest?.stats?.agentTotals?.[agent.id] && <><div><dt>Total tokens</dt><dd>{guest.stats.agentTotals[agent.id].totalTokens === null ? "Not reported" : guest.stats.agentTotals[agent.id].totalTokens!.toLocaleString()}</dd></div><div><dt>Spend</dt><dd>{guest.stats.agentTotals[agent.id].totalSpend === null ? "Not reported" : `USD ${guest.stats.agentTotals[agent.id].totalSpend!.toFixed(2)}`}</dd></div></>}
                     </dl>
                     <AgentVitals agent={agent} />
                     <small>
@@ -519,7 +585,7 @@ export default function App() {
                         Replay all sessions together
                       </button>
                     )}
-                    {local.enabled && (
+                    {!guest && local.enabled && (
                       <small className="context-note">
                         Context is the last reported input size, not lifetime
                         usage.
@@ -528,6 +594,7 @@ export default function App() {
                   </>
                 )
               )}
+              </>}
             </div>
           )}
           <div className="world-bottom">
@@ -567,7 +634,7 @@ export default function App() {
                     office.current
                       ?.requestFullscreen()
                       .catch(() =>
-                        setError("Fullscreen is unavailable in this browser."),
+                        setOfficeError("Fullscreen is unavailable in this browser."),
                       );
                 }}
               >
@@ -583,7 +650,7 @@ export default function App() {
       <footer>
         <span>
           <span className="footer-dot" />
-          {preview
+          {guest ? `${guest.profile.displayName} · shared snapshot` : showPreview
             ? "A playground for your future team"
             : replay
               ? "Recorded task replay · no task is being executed"
@@ -596,87 +663,11 @@ export default function App() {
           with a little <Heart size={11} />
         </span>
       </footer>
-      {modal && (
-        <div className="modal-backdrop" onClick={() => setModal(false)}>
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="import-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="close"
-              aria-label="Close import"
-              onClick={() => setModal(false)}
-            >
-              <X size={18} />
-            </button>
-            <span className="modal-icon">
-              <ArrowDownToLine size={24} />
-            </span>
-            <div className="eyebrow">BRING YOUR OWN LITTLE GUYS</div>
-            <h2 id="import-title">Make room for your agents.</h2>
-            <p>
-              Import a real office snapshot to see your team here. Your agents
-              join this world and are saved in this browser.
-            </p>
-            <div className="connection-row">
-              <span className="codex-symbol">⌘</span>
-              <div>
-                <b>Codex</b>
-                <small>Read sessions from your configured local project</small>
-              </div>
-              <span className="connection-status">
-                {local.state === "connected" ? "Connected" : "Local only"}
-              </span>
-            </div>
-            <button className="file-import" onClick={connectRobots}>
-              <Users size={19} />
-              <span>
-                <b>Import local sessions</b>
-                <small>
-                  6 recent sessions · read-only · refreshes every 5s
-                </small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-            <p className="privacy-note">
-              Local import reads session metadata on this computer. It does not
-              run or restart your agents.
-            </p>
-            <button
-              className="file-import"
-              onClick={() => input.current?.click()}
-            >
-              <ArrowDownToLine size={19} />
-              <span>
-                <b>Import agent snapshot</b>
-                <small>Office snapshot JSON · up to 2 MB</small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-            <input
-              ref={input}
-              type="file"
-              accept=".json,application/json"
-              onChange={importFile}
-              hidden
-            />
-            {error && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
-            <p className="privacy-note">
-              <Check size={13} />
-              No invented activity, token counts, or progress.
-            </p>
-          </section>
-        </div>
-      )}
-      {welcome && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onImport={(imported) => {
+      {!guest && studioTab && <RoomStudio key={studioTab} initialTab={studioTab} profile={profile} onProfile={setProfile} books={books} onBooks={setBooks} projects={projects} onProjects={setProjects} stats={stats} onStats={setStats} share={share} onShare={setShare} agents={visibleAgents} onClose={() => setStudioTab(null)} />}
+      {welcome && !guest && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onImport={(imported, importedLinks) => {
         const merged = addAgents(imported);
+        setInteractions(importedLinks ?? []);
+        setInteractionClock(Date.now());
         local.disconnect();
         autoStartReplay.current = false;
         setPreview(false);

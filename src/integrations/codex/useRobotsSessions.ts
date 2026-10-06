@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OfficeAgent } from "../../types";
+import type { OfficeSnapshot } from "../../types";
 import { parseOfficeSnapshot } from "../../snapshot";
 
-export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
-  const [source, setSource] = useState(() => sessionStorage.getItem("dots-local-source") ?? "robots");
+export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void) {
+  const [source, setSource] = useState(() => sessionStorage.getItem("dots-local-source") ?? "workspace");
   const [connected, setConnected] = useState(
     () => sessionStorage.getItem("dots-robots-connected") === "yes",
   );
@@ -13,20 +13,22 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
   const [error, setError] = useState("");
   const [observedAt, setObservedAt] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const receive = useRef(onAgents);
-  receive.current = onAgents;
+  const [project, setProject] = useState("");
+  const receive = useRef(onSnapshot);
+  receive.current = onSnapshot;
   const disconnect = useCallback(() => {
     sessionStorage.removeItem("dots-robots-connected");
     setConnected(false);
     setState("disconnected");
     setError("");
     setObservedAt(null);
+    setProject("");
   }, []);
-  const connect = useCallback((nextSource = "robots") => {
+  const connect = useCallback((nextSource = "workspace") => {
     sessionStorage.setItem("dots-local-source", nextSource);
     setSource(nextSource);
     setState("loading");
-    receive.current([]);
+    receive.current({ version: 1, agents: [] });
     sessionStorage.setItem("dots-robots-connected", "yes");
     setConnected(true);
   }, []);
@@ -56,8 +58,10 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
           throw new Error(data.error ?? "Cannot read local sessions.");
         const snapshot = parseOfficeSnapshot(JSON.stringify(data));
         if (cancelled) return;
-        receive.current(snapshot.agents.sort((a, b) => a.id.localeCompare(b.id)));
+        snapshot.agents.sort((a, b) => a.id.localeCompare(b.id));
+        receive.current(snapshot);
         setTotal(data.total);
+        setProject(typeof data.project === "string" ? data.project : "");
         setObservedAt(data.observedAt);
         setState("connected");
         setError("");
@@ -82,6 +86,7 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
     error,
     observedAt,
     total,
+    project,
     enabled: connected,
     source,
   };

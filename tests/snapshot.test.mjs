@@ -31,3 +31,11 @@ test("rejects malformed snapshots, duplicate identity, and invalid context", () 
   ])
     assert.throws(() => parseOfficeSnapshot(text));
 });
+test("accepts recorded links only for known distinct sessions", () => {
+  const other = { ...agent, id: "second-session" };
+  const link = { fromId: agent.id, toId: other.id, kind: "message", at: "2026-10-06T18:00:00Z" };
+  assert.equal(parseOfficeSnapshot(JSON.stringify({ version: 1, agents: [agent, other], interactions: [link] })).interactions.length, 1);
+  for (const bad of [{ ...link, toId: "missing" }, { ...link, fromId: other.id, toId: other.id }, { ...link, at: "no date" }, { ...link, kind: "guessed" }]) {
+    assert.throws(() => parseOfficeSnapshot(JSON.stringify({ version: 1, agents: [agent, other], interactions: [bad] })));
+  }
+});
