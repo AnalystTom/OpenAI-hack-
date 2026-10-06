@@ -478,6 +478,9 @@ function Walker({
       }}
     >
       <group ref={visual} name="Agent model" />
+      {hammerHeld && <mesh name="Hammer hit area" position={[0, 1, 0]} visible={false}>
+        <sphereGeometry args={[1.8, 12, 8]} />
+      </mesh>}
       {fireworkStartedAt !== null && <AgentFirework startedAt={fireworkStartedAt} color={CHARACTERS.find((c) => c.kind === kind)!.color} />}
       {selected && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
@@ -708,7 +711,7 @@ export default function OfficeWorld({
       />
     </Canvas>
     <div className="hammer-hint" role="status" aria-live="polite">
-      {hammerHeld ? "Hammer in hand · click a coworker · Esc or right-click to put down" : "Pick up the toy hammer in the office"}
+      {hammerHeld ? "Hammer in hand · click near a coworker · Esc or right-click to put down" : "Pick up the toy hammer in the office"}
       <small>{lastHit ? `${lastHit} is heading back to their desk.` : "Toy interaction · character movement only"}</small>
     </div>
     <div className="tibo-reset-hint" role="status" aria-live="polite">
