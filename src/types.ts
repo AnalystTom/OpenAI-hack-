@@ -26,6 +26,9 @@ export interface OfficeAgent {
   character?: CharacterKind;
   sourceUrl?: string;
   history?: RecordedActivity[];
+  activityLabel?: string | null;
+  /** Local playback controls, never source session telemetry. */
+  playback?: { state: "playing" | "finished"; label: string };
 }
 export interface OfficeSnapshot {
   version: 1;

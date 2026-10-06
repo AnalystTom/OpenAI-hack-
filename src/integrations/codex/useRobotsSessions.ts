@@ -3,6 +3,7 @@ import type { OfficeAgent } from "../../types";
 import { parseOfficeSnapshot } from "../../snapshot";
 
 export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
+  const [source, setSource] = useState(() => sessionStorage.getItem("dots-local-source") ?? "robots");
   const [connected, setConnected] = useState(
     () => sessionStorage.getItem("dots-robots-connected") === "yes",
   );
@@ -21,7 +22,11 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
     setError("");
     setObservedAt(null);
   }, []);
-  const connect = useCallback(() => {
+  const connect = useCallback((nextSource = "robots") => {
+    sessionStorage.setItem("dots-local-source", nextSource);
+    setSource(nextSource);
+    setState("loading");
+    receive.current([]);
     sessionStorage.setItem("dots-robots-connected", "yes");
     setConnected(true);
   }, []);
@@ -35,7 +40,7 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
         previous === "connected" || previous === "error" ? previous : "loading",
       );
       try {
-        const response = await fetch("/api/local-codex/robots", {
+        const response = await fetch(`/api/local-codex/robots?source=${encodeURIComponent(source)}`, {
           signal: AbortSignal.any([
             controller.signal,
             AbortSignal.timeout(5000),
@@ -51,7 +56,7 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
           throw new Error(data.error ?? "Cannot read local sessions.");
         const snapshot = parseOfficeSnapshot(JSON.stringify(data));
         if (cancelled) return;
-        receive.current(snapshot.agents);
+        receive.current(snapshot.agents.sort((a, b) => a.id.localeCompare(b.id)));
         setTotal(data.total);
         setObservedAt(data.observedAt);
         setState("connected");
@@ -69,7 +74,7 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [connected]);
+  }, [connected, source]);
   return {
     connect,
     disconnect,
@@ -78,5 +83,6 @@ export function useRobotsSessions(onAgents: (agents: OfficeAgent[]) => void) {
     observedAt,
     total,
     enabled: connected,
+    source,
   };
 }

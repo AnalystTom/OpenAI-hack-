@@ -1,11 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { toolActivityLabel } from "../server/activity-label.mjs";
 import {
   parseSessionEvents,
   localRequestAllowed,
 } from "../server/codex-sessions.mjs";
 const at = "2026-10-06T18:00:00.000Z";
 const now = Date.parse(at);
+test("activity descriptions come from identifiable tools and commands", () => {
+  assert.equal(toolActivityLabel("exec_command", JSON.stringify({cmd:"npm test"})), "Running tests");
+  assert.equal(toolActivityLabel("exec", 'await tools.exec_command({cmd:"npm run build"})'), "Checking the build");
+  assert.equal(toolActivityLabel("exec_command", JSON.stringify({cmd:"rg -n task src"})), "Inspecting project files");
+  assert.equal(toolActivityLabel("apply_patch", "PRIVATE_FILE_CONTENT"), "Editing project files");
+  assert.equal(toolActivityLabel("exec", "unclassified private code"), "Using tools");
+});
 const event = (type, payload, timestamp = at) =>
   JSON.stringify({ type, timestamp, payload });
 test("running/completed turns drive working and idle, stale runs stay unknown", () => {

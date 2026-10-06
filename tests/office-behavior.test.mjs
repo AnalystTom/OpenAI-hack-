@@ -27,3 +27,11 @@ test("offline/unknown never simulate working and character mapping survives reor
   assert.equal(agentCharacter("a", "gpt-6-luna", "Codex"), "purple-dot");
   assert.equal(agentCharacter("a", null, "Lovable"), "lovable");
 });
+test("seated agents face back toward their desk surface", () => {
+  const pose = officePose("working", 0, 0, 6);
+  assert.ok(
+    Math.cos(pose.facing) < 0,
+    "character looks toward negative Z where the desk is",
+  );
+  assert.ok(pose.z > -4.4 * 1.15, "seat is on the front side of the desk");
+});

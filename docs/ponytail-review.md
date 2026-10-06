@@ -22,3 +22,11 @@ net: -5 lines applied.
 Follow-up review: Lean already. Ship.
 
 Validation: production build and eight parser, state-mapping, and local-request-boundary tests. Playwright verified real Robots import, recorded work at a desk, completion returning to idle, connection loss/recovery, and disconnect. The local feed reads session metadata only; hosted pairing remains separate.
+# Current office integration review
+
+1. src/officeReplay.ts:L22: delete: unused playbackLabel helper. Nothing replaces it. Addressed.
+2. server/office-import.mjs:L44: reuse: duplicate snapshot field allowlist. Use serializeOffice from src/officeStore.ts. Addressed.
+
+net: -7 lines applied.
+
+Follow-up review of the local changes: Lean already. Ship.

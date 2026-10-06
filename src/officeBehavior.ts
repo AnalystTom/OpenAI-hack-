@@ -3,6 +3,9 @@ import type { AgentStatus, CharacterKind } from "./types";
 export const DESKS = [-5.8, -2.1, 1.6].flatMap((x) =>
   [-4.4, 3.6].map((z) => ({ x, z })),
 );
+// The GLB chair faces +Z; turn it toward the desk at -Z. Offsets include its off-centre pivot.
+export const CHAIR_PLACEMENT = { x: 0.8, z: -0.09, facing: 180 };
+export const SEAT_PLACEMENT = { x: 0.9, z: 0.65, y: 0.27, facing: Math.PI };
 export function agentCharacter(
   id: string,
   model: string | null,
@@ -25,10 +28,10 @@ export function officePose(
   if (status === "working") {
     const desk = DESKS[index % DESKS.length];
     return {
-      x: (desk.x + 0.5) * 1.15,
-      z: (desk.z + 1.35) * 1.15,
-      y: 0.4,
-      facing: Math.PI,
+      x: (desk.x + SEAT_PLACEMENT.x) * 1.15,
+      z: (desk.z + SEAT_PLACEMENT.z) * 1.15,
+      y: SEAT_PLACEMENT.y,
+      facing: SEAT_PLACEMENT.facing,
       walking: false,
       sitting: true,
     };
@@ -59,3 +62,13 @@ export function officePose(
     sitting: false,
   };
 }
+
+export const STATUS_LABELS: Record<AgentStatus | "preview", string> = {
+  working: "Working at desk",
+  idle: "Waiting for a task",
+  offline: "Source disconnected",
+  unknown: "Status not confirmed",
+  blocked: "Needs your help",
+  error: "Task error",
+  preview: "Character preview",
+};

@@ -1,6 +1,12 @@
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Billboard, ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
+import {
+  Billboard,
+  ContactShadows,
+  Html,
+  OrbitControls,
+  RoundedBox,
+} from "@react-three/drei";
 import * as THREE from "three";
 import { InstancedFurnitureItems } from "../features/retro-office/objects/furniture";
 import type { FurnitureItem } from "../features/retro-office/core/types";
@@ -9,6 +15,10 @@ import {
   type MascotCharacter,
 } from "./office/characters/createMascotCharacter";
 import type { AgentStatus, CharacterKind, OfficeAgent } from "../types";
+import { agentActivityLabel } from "../officeReplay";
+import Tibo from "./office/Tibo";
+import ToyHammer from "./office/ToyHammer";
+import AgentFirework, { FIREWORK_DURATION } from "./office/AgentFirework";
 
 export const CHARACTERS: {
   kind: CharacterKind;
@@ -53,41 +63,56 @@ export const CHARACTERS: {
     description: "A little heart with a whole lot of build energy.",
   },
 ];
-import { DESKS, agentCharacter, officePose } from "../officeBehavior";
+import {
+  DESKS,
+  CHAIR_PLACEMENT,
+  STATUS_LABELS,
+  agentCharacter,
+  officePose,
+} from "../officeBehavior";
 const noop = () => {};
 function Label({
   text,
+  subtitle,
   position,
   rotation = [0, 0, 0],
   width = 3,
   height = 0.65,
   bg = "#edf0db",
   color = "#526447",
+  fontSize = 36,
 }: {
   text: string;
+  subtitle?: string;
   position: [number, number, number];
   rotation?: [number, number, number];
   width?: number;
   height?: number;
   bg?: string;
   color?: string;
+  fontSize?: number;
 }) {
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 768;
-    canvas.height = 160;
+    canvas.height = subtitle ? 256 : 160;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 768, 160);
+    ctx.fillRect(0, 0, 768, canvas.height);
     ctx.fillStyle = color;
-    ctx.font = "600 36px sans-serif";
+    ctx.font = `600 ${fontSize}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, 384, 80, 720);
+    if (subtitle) {
+      ctx.font = "600 54px sans-serif";
+      ctx.fillText(text, 384, 70, 708);
+      ctx.font = "700 66px sans-serif";
+      ctx.fillText(subtitle, 384, 176, 708);
+    } else ctx.fillText(text, 384, 80, 720);
     const value = new THREE.CanvasTexture(canvas);
     value.colorSpace = THREE.SRGBColorSpace;
     return value;
-  }, [text, bg, color]);
+  }, [text, subtitle, bg, color, fontSize]);
   useEffect(() => () => texture.dispose(), [texture]);
   return (
     <mesh position={position} rotation={rotation}>
@@ -109,8 +134,13 @@ function Furniture() {
       });
     for (const { x, z } of DESKS) {
       add("desk_cubicle", x, z);
-      add("computer", x + 0.25, z + 0.1);
-      add("chair", x + 0.45, z + 1);
+      add("computer", x + 0.55, z - 0.25);
+      add(
+        "chair",
+        x + CHAIR_PLACEMENT.x,
+        z + CHAIR_PLACEMENT.z,
+        CHAIR_PLACEMENT.facing,
+      );
     }
     add("couch", 6, -3, 270);
     add("round_table", 6.2, 0.6);
@@ -249,6 +279,7 @@ function Room({ night }: { night: boolean }) {
   );
 }
 function Walker({
+  id,
   kind,
   index,
   total,
@@ -257,7 +288,13 @@ function Walker({
   onSelect,
   label,
   status,
+  statusText,
+  fireworkStartedAt,
+  hammerHeld,
+  hitAt,
+  onHit,
 }: {
+  id: string;
   kind: CharacterKind;
   index: number;
   total: number;
@@ -266,15 +303,22 @@ function Walker({
   onSelect: () => void;
   label?: string;
   status: AgentStatus | "preview";
+  statusText?: string;
+  fireworkStartedAt: number | null;
+  hammerHeld: boolean;
+  hitAt?: number;
+  onHit: () => void;
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
   const elapsed = useRef(0);
+  const visual = useRef<THREE.Group>(null);
+  const initialPose = useRef(officePose(status, index, 0, total));
   useEffect(() => {
     const instance = createMascotCharacter(kind);
     mascot.current = instance;
     instance.group.scale.setScalar(1.02);
-    parent.current?.add(instance.group);
+    visual.current?.add(instance.group);
     return () => {
       instance.dispose();
       mascot.current = null;
@@ -282,7 +326,12 @@ function Walker({
   }, [kind]);
   useFrame((_, dt) => {
     if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const pose = officePose(status, index, elapsed.current, total);
+    const pose = officePose(hitAt === undefined ? status : "working", index, elapsed.current, total);
+    if (visual.current) {
+      const impact = hitAt === undefined ? 0 : Math.max(0, 1 - (performance.now() - hitAt) / 400);
+      visual.current.scale.set(1 + impact * 0.18, 1 - impact * 0.2, 1 + impact * 0.18);
+      visual.current.rotation.z = Math.sin(impact * Math.PI * 3) * 0.15;
+    }
     if (parent.current) {
       const target = new THREE.Vector3(pose.x, pose.y, pose.z);
       const moving = parent.current.position.distanceTo(target) > 0.12;
@@ -298,30 +347,48 @@ function Walker({
   return (
     <group
       ref={parent}
+      name={`office-agent:${id}`}
+      userData={{ hammerHitAt: hitAt, sourceStatus: status }}
+      position={[
+        initialPose.current.x,
+        initialPose.current.y,
+        initialPose.current.z,
+      ]}
+      rotation={[0, initialPose.current.facing, 0]}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect();
+        if (!hammerHeld) onSelect();
+      }}
+      onPointerDown={(e) => {
+        if (!hammerHeld || e.button !== 0 || fireworkStartedAt !== null) return;
+        e.stopPropagation();
+        onHit();
       }}
       onPointerOver={() => {
-        document.body.style.cursor = "pointer";
+        if (!hammerHeld) document.body.style.cursor = "pointer";
       }}
       onPointerOut={() => {
         document.body.style.cursor = "auto";
       }}
     >
+      <group ref={visual} name="Agent model" />
+      {fireworkStartedAt !== null && <AgentFirework startedAt={fireworkStartedAt} color={CHARACTERS.find((c) => c.kind === kind)!.color} />}
       {selected && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
           <ringGeometry args={[0.7, 0.77, 64]} />
           <meshBasicMaterial color="#f2b94a" side={THREE.DoubleSide} />
         </mesh>
       )}
-      {label && (
-        <Billboard position={[0, 2.35, 0]}>
+      {label && fireworkStartedAt === null && (
+        <Billboard position={[0, 2.75, 0]}>
           <Label
-            text={`${status === "working" ? "● " : ""}${label.length > 34 ? label.slice(0, 34) + "…" : label}`}
+            text={label.length > 24 ? label.slice(0, 24) + "…" : label}
+            subtitle={hitAt === undefined ? statusText ?? STATUS_LABELS[status] : "At desk · hammer play"}
+            bg={status === "working" ? "#e7f3d8" : "#fcfcf5"}
+            color="#283b23"
             position={[0, 0, 0]}
-            width={2.5}
-            height={0.45}
+            width={4.2}
+            height={1.15}
           />
         </Billboard>
       )}
@@ -361,13 +428,40 @@ export default function OfficeWorld({
   onSelect: (id: string) => void;
   onReady: () => void;
 }) {
+  const [fireworkStartedAt, setFireworkStartedAt] = useState<number | null>(null);
+  const [hammerHeld, setHammerHeld] = useState(false);
+  const [swingAt, setSwingAt] = useState(0);
+  const [hammerHits, setHammerHits] = useState<Record<string, number>>({});
+  const [lastHit, setLastHit] = useState<string | null>(null);
+  function hitAgent(id: string, name: string) {
+    const at = performance.now();
+    setSwingAt(at);
+    setHammerHits((hits) => ({ ...hits, [id]: at }));
+    setLastHit(name);
+  }
+  const hasAgents = CHARACTERS.length > 0 || agents.length > 0;
+  useEffect(() => {
+    if (fireworkStartedAt === null) return;
+    const timer = setTimeout(() => setFireworkStartedAt(null), FIREWORK_DURATION * 1000);
+    return () => clearTimeout(timer);
+  }, [fireworkStartedAt]);
+  function resetWithFireworks() {
+    if (hasAgents) {
+      setHammerHits({});
+      setLastHit(null);
+      setFireworkStartedAt(performance.now());
+    }
+  }
   return (
+    <>
     <Canvas
       shadows
       dpr={[1, 1.7]}
       camera={{ position: [22, 21, 25], fov: 38 }}
       onCreated={onReady}
       aria-label="Interactive 3D office"
+      style={{ cursor: hammerHeld ? "none" : "auto" }}
+      onPointerMissed={() => { if (hammerHeld) setSwingAt(performance.now()); }}
     >
       <color attach="background" args={[night ? "#252e32" : "#e9ebe5"]} />
       <ambientLight intensity={night ? 0.8 : 1.6} />
@@ -386,26 +480,59 @@ export default function OfficeWorld({
       <Suspense fallback={null}>
         <Room night={night} />
       </Suspense>
-      {(preview
-        ? CHARACTERS.map((c) => ({
+      <Tibo celebrating={fireworkStartedAt !== null} />
+      <ToyHammer held={hammerHeld} swingAt={swingAt} onPickUp={() => { document.body.style.cursor = "auto"; onSelect(""); setHammerHeld(true); }} onDrop={() => setHammerHeld(false)} />
+      {!hammerHeld && <Billboard position={[3.8, 2.4, 5.2]}>
+        <Label text="TOY HAMMER" subtitle="Pick up. Tap a coworker." position={[0, 0, 0]} width={3.2} height={0.8} bg="#fff4db" color="#594b32" />
+      </Billboard>}
+      <group position={[8.1, 0.1, 5.6]} name="Tibo reset station">
+        <Box position={[0, 0.15, 0]} size={[1.7, 0.3, 1.7]} color="#394940" />
+        <Box position={[0, 0.66, 0]} size={[1.05, 0.8, 1.05]} color="#e8dec9" />
+        <mesh position={[0, 1.1, 0]} castShadow>
+          <cylinderGeometry args={[0.69, 0.69, 0.14, 48]} />
+          <meshStandardMaterial color="#444c49" metalness={0.65} roughness={0.3} />
+        </mesh>
+        <group position={[0, fireworkStartedAt === null ? 1.3 : 1.2, 0]}>
+          <mesh name="3D reset button" castShadow onClick={(event) => { event.stopPropagation(); resetWithFireworks(); }}
+            onPointerOver={() => { document.body.style.cursor = hasAgents ? "pointer" : "default"; }}
+            onPointerOut={() => { document.body.style.cursor = "auto"; }}>
+            <cylinderGeometry args={[0.57, 0.62, 0.3, 48]} />
+            <meshStandardMaterial color={hasAgents ? "#e6533d" : "#848b80"} roughness={0.3} emissive="#e6533d" emissiveIntensity={fireworkStartedAt === null ? 0 : 0.45} />
+          </mesh>
+          <Label text="RESET" position={[0, 0.155, 0]} rotation={[-Math.PI / 2, 0, 0]} width={0.85} height={0.3} bg={hasAgents ? "#e6533d" : "#848b80"} color="#fff7eb" fontSize={150} />
+          <Html position={[0, 0.18, 0]} center zIndexRange={[10, 0]}>
+            <button className="world-reset-hit" aria-label="Reset agents with fireworks" disabled={!hasAgents}
+              onPointerDown={(event) => event.stopPropagation()} onClick={resetWithFireworks} />
+          </Html>
+        </group>
+        <Billboard position={[-1.15, 4.35, 0]}>
+          <Label text="TIBO" subtitle="Hit reset. Make sparks." position={[0, 0, 0]} width={3.7} height={0.9} bg="#fff6e7" color="#524b3c" />
+        </Billboard>
+      </group>
+      {[...CHARACTERS.map((c) => ({
             id: c.kind,
             kind: c.kind,
             label: undefined,
             status: "preview" as const,
-          }))
-        : agents.map((a) => ({
+          })),
+        ...agents.map((a) => ({
             id: a.id,
             kind: a.character ?? agentCharacter(a.id, a.model, a.harness),
             label: a.name,
             status: a.status,
+            statusText: agentActivityLabel(a),
           }))
-      ).map((a, i, array) => (
+      ].map((a, i, array) => (
         <Walker
           key={a.id}
           {...a}
           index={i}
           total={array.length}
           paused={paused}
+          fireworkStartedAt={fireworkStartedAt}
+          hammerHeld={hammerHeld}
+          hitAt={hammerHits[a.id]}
+          onHit={() => hitAgent(a.id, a.label ?? CHARACTERS.find((c) => c.kind === a.kind)!.name)}
           selected={selected === a.id}
           onSelect={() => onSelect(a.id)}
         />
@@ -422,6 +549,7 @@ export default function OfficeWorld({
       <CameraReset resetKey={cameraKey} />
       <OrbitControls
         makeDefault
+        enabled={!hammerHeld}
         target={[0, 0.2, 0]}
         minDistance={13}
         maxDistance={52}
@@ -430,5 +558,14 @@ export default function OfficeWorld({
         enableDamping
       />
     </Canvas>
+    <div className="hammer-hint" role="status" aria-live="polite">
+      {hammerHeld ? "Hammer in hand · click a coworker · Esc or right-click to put down" : "Pick up the toy hammer in the office"}
+      <small>{lastHit ? `${lastHit} is heading back to their desk.` : "Toy interaction · character movement only"}</small>
+    </div>
+    <div className="tibo-reset-hint" role="status" aria-live="polite">
+      {fireworkStartedAt !== null ? "Fireworks above your agents!" : hasAgents ? "Hit Tibo’s red 3D button for fireworks above your agents." : "Import agents to try Tibo’s firework reset."}
+      <small>Visual reset · session data stays intact</small>
+    </div>
+    </>
   );
 }

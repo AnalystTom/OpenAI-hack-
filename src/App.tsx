@@ -20,15 +20,35 @@ import {
   X,
 } from "lucide-react";
 import OfficeWorld, { CHARACTERS } from "./components/OfficeWorld";
-import type { OfficeAgent, RecordedActivity } from "./types";
+import type { OfficeAgent } from "./types";
 import { parseOfficeSnapshot } from "./snapshot";
-import { agentCharacter } from "./officeBehavior";
+import {
+  createOfficeReplay,
+  appendOfficeReplay,
+  agentActivityLabel,
+  replayOffice,
+  officeSummary,
+  replayClockLabel,
+  type OfficeReplay,
+} from "./officeReplay";
+import { agentCharacter, STATUS_LABELS } from "./officeBehavior";
 import { useRobotsSessions } from "./integrations/codex/useRobotsSessions";
+import Welcome from "./components/import/Welcome";
+import { mergeOfficeAgents, readSavedOffice, serializeOffice, OFFICE_STORAGE_KEY, ENTERED_STORAGE_KEY } from "./officeStore";
 
 export default function App() {
-  const [agents, setAgents] = useState<OfficeAgent[]>([]);
+  const [saved] = useState(() => {
+    try { return readSavedOffice(localStorage); }
+    catch { return { agents: [], error: "Browser storage is unavailable. Your office cannot be saved on this device." }; }
+  });
+  const [welcome, setWelcome] = useState(() => {
+    try { return localStorage.getItem(ENTERED_STORAGE_KEY) !== "yes"; } catch { return true; }
+  });
+  const [agents, setAgents] = useState<OfficeAgent[]>(saved.agents);
+  const agentsRef = useRef(agents);
+  const [officeError, setOfficeError] = useState(saved.error);
   const [preview, setPreview] = useState(
-    () => sessionStorage.getItem("dots-robots-connected") !== "yes",
+    () => !saved.agents.length && sessionStorage.getItem("dots-robots-connected") !== "yes",
   );
   const [paused, setPaused] = useState(false);
   const [night, setNight] = useState(false);
@@ -40,69 +60,78 @@ export default function App() {
   const [error, setError] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const office = useRef<HTMLDivElement>(null);
-  const character = preview
-    ? CHARACTERS.find((c) => c.kind === selected)
-    : undefined;
-  const local = useRobotsSessions(setAgents);
-  const [replay, setReplay] = useState<{
-    id: string;
-    history: RecordedActivity[];
-    started: number;
-  } | null>(null);
-  const [replayAt, setReplayAt] = useState(0);
-  useEffect(() => {
-    if (!replay) return;
-    const start = Date.parse(replay.history[0].at),
-      end = Date.parse(replay.history[replay.history.length - 1].at);
-    const tick = () =>
-      setReplayAt(
-        start +
-          Math.min(1, (Date.now() - replay.started) / 20000) * (end - start),
-      );
-    tick();
-    const timer = setInterval(tick, 100);
-    return () => clearInterval(timer);
-  }, [replay]);
-  const recordedEvent = replay?.history
-    .filter((event) => Date.parse(event.at) <= replayAt)
-    .at(-1);
-  const visibleAgents = agents.map((a) => {
-    if (replay?.id === a.id)
-      return {
-        ...a,
-        status: recordedEvent?.status ?? ("working" as const),
-        contextUsed: null,
-        contextWindow: null,
-      };
-    return local.enabled && local.state === "error"
-      ? { ...a, status: "offline" as const }
-      : a;
+  const character = CHARACTERS.find((c) => c.kind === selected);
+  function addAgents(incoming: OfficeAgent[]) {
+    const merged = mergeOfficeAgents(agentsRef.current, incoming);
+    try { localStorage.setItem(OFFICE_STORAGE_KEY, serializeOffice(merged)); }
+    catch { throw new Error("This browser could not save the office. Free some browser storage and try importing again."); }
+    agentsRef.current = merged;
+    setAgents(merged);
+    setOfficeError("");
+    return merged;
+  }
+  function dismissWelcome() {
+    setWelcome(false);
+    try { localStorage.setItem(ENTERED_STORAGE_KEY, "yes"); }
+    catch { setOfficeError("Browser storage is unavailable. The welcome card will reappear on refresh."); }
+  }
+  const local = useRobotsSessions((incoming) => {
+    if (!incoming.length) return;
+    try { addAgents(incoming); } catch (e) { setOfficeError(e instanceof Error ? e.message : "Unable to save office."); }
   });
-  const agent = !preview
-    ? visibleAgents.find((a) => a.id === selected)
-    : undefined;
-  const behavior = (a: OfficeAgent) =>
-    a.status === "working"
-      ? "Working at desk"
-      : a.status === "idle"
-        ? "Waiting for a task"
-        : a.status === "offline"
-          ? "Source disconnected"
-          : a.status === "unknown"
-            ? "Status not confirmed"
-            : a.status;
+  const [replay, setReplay] = useState<OfficeReplay | null>(null);
+  const [replayElapsed, setReplayElapsed] = useState(0);
+  const [replaySpeed, setReplaySpeed] = useState(10);
+  const autoStartReplay = useRef(true);
+  function startOfficeReplay(source = agents) {
+    setReplay(createOfficeReplay(source));
+    setReplayElapsed(0);
+    setPaused(false);
+  }
+  useEffect(() => {
+    if (!agents.length || !autoStartReplay.current) return;
+    autoStartReplay.current = false;
+    startOfficeReplay(agents);
+  }, [agents]);
+  useEffect(() => {
+    if (!replay || paused || replayElapsed >= replay.durationMs) return;
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now(),
+        delta = now - last;
+      last = now;
+      setReplayElapsed((elapsed) =>
+        Math.min(replay.durationMs, elapsed + delta * replaySpeed),
+      );
+    }, 100);
+    return () => clearInterval(timer);
+  }, [replay, paused, replaySpeed, replayElapsed >= (replay?.durationMs ?? 0)]);
+  const visibleAgents = replay
+    ? replayOffice(replay, replayElapsed)
+    : agents.map((a) =>
+        local.enabled && local.state === "error"
+          ? { ...a, status: "offline" as const }
+          : a,
+      );
+  const summary = officeSummary(visibleAgents, !!replay);
+  const agent = visibleAgents.find((a) => a.id === selected);
+  const behavior = (a: OfficeAgent) => agentActivityLabel(a) ?? STATUS_LABELS[a.status];
   function connectRobots() {
+    autoStartReplay.current = true;
     setReplay(null);
     setSelected(null);
     setPreview(false);
     setModal(false);
     local.connect();
   }
-  function startReplay(a: OfficeAgent) {
-    if (!a.history?.length) return;
-    setReplayAt(Date.parse(a.history[0].at));
+  function watchLocal(source: string) {
+    autoStartReplay.current = false;
+    setReplay(null);
+    setSelected(null);
+    setPreview(false);
+    setWelcome(false);
     setPaused(false);
-    setReplay({ id: a.id, history: a.history, started: Date.now() });
+    local.connect(source);
   }
 
   async function importFile(event: ChangeEvent<HTMLInputElement>) {
@@ -113,8 +142,10 @@ export default function App() {
         throw new Error("Choose a snapshot smaller than 2 MB.");
       const snapshot = parseOfficeSnapshot(await file.text());
       local.disconnect();
-      setReplay(null);
-      setAgents(snapshot.agents);
+      autoStartReplay.current = false;
+      const merged = addAgents(snapshot.agents);
+      if (replay) setReplay(appendOfficeReplay(replay, snapshot.agents, replayElapsed));
+      else startOfficeReplay(merged);
       setPreview(false);
       setSelected(null);
       setModal(false);
@@ -127,7 +158,6 @@ export default function App() {
     event.target.value = "";
   }
   function switchView(value: boolean) {
-    setReplay(null);
     setPreview(value);
     setSelected(null);
   }
@@ -153,7 +183,7 @@ export default function App() {
             onClick={() => switchView(true)}
           >
             <Box size={15} />
-            The playground
+            Characters
           </button>
           <button
             className={!preview ? "active" : ""}
@@ -163,7 +193,7 @@ export default function App() {
             Your agents {agents.length > 0 && <small>{agents.length}</small>}
           </button>
         </nav>
-        <button className="import-button" onClick={() => setModal(true)}>
+        <button className="import-button" onClick={() => setWelcome(true)}>
           <ArrowDownToLine size={15} />
           Import agents
         </button>
@@ -260,10 +290,20 @@ export default function App() {
             </div>
           )}
           <div className="sidebar-bottom">
+            {import.meta.env.DEV && <div className="local-source-controls">
+              <label htmlFor="local-source">Watch local Codex sessions</label>
+              <select id="local-source" value={local.enabled ? local.source : ""} onChange={(e) => watchLocal(e.target.value)}>
+                <option value="" disabled>Choose a source</option>
+                <option value="robots">Robots sessions</option>
+                <option value="demo">Six Luna demo sessions</option>
+                <option value="design">Design Codex session replay</option>
+              </select>
+              {local.enabled && <button onClick={() => { setReplay(null); setPaused(false); }}>Watch live status</button>}
+            </div>}
             {local.enabled && (
               <div className="connection-summary">
                 <b>
-                  Robots ·{" "}
+                  {local.source === "robots" ? "Robots" : local.source === "demo" ? "Luna demo" : "Design session"} ·{" "}
                   {local.state === "connected" ? "local feed" : local.state}
                 </b>
                 <span>
@@ -274,7 +314,7 @@ export default function App() {
                   onClick={() => {
                     local.disconnect();
                     setReplay(null);
-                    setAgents([]);
+                    // Disconnecting the feed keeps the saved residents.
                   }}
                 >
                   Disconnect
@@ -347,25 +387,48 @@ export default function App() {
             local.state === "loading" &&
             !agents.length && (
               <div className="connection-banner" role="status">
-                Reading your Robots sessions…
+                Reading your Codex sessions…
               </div>
             )}
-          {!preview && local.error && (
+          {!preview && !replay && local.error && (
             <div className="connection-banner error" role="alert">
               {local.error}
             </div>
           )}
           {!preview && replay && (
             <div className="replay-banner" role="status">
-              <b>Recorded replay</b>
-              <span>
-                {recordedEvent?.label ?? "Task started"} ·{" "}
-                {new Date(replayAt).toLocaleTimeString()}
+              <b>Parallel session replay</b>
+              <span className="replay-clock">
+                T+{replayClockLabel(replayElapsed)} · aligned task starts
               </span>
+              <label className="replay-speed">
+                Speed{" "}
+                <select
+                  aria-label="Replay speed"
+                  value={replaySpeed}
+                  onChange={(e) => setReplaySpeed(Number(e.target.value))}
+                >
+                  <option value={1}>1×</option>
+                  <option value={10}>10×</option>
+                  <option value={60}>60×</option>
+                </select>
+              </label>
+              <button onClick={() => startOfficeReplay(replay.agents)}>
+                Restart all sessions
+              </button>
               <button onClick={() => setReplay(null)}>
                 Return to current state
               </button>
             </div>
+          )}
+          {!preview && visibleAgents.length > 0 && (
+            <section className="office-summary" aria-label="Office summary">
+              <span>{replay ? "REPLAY" : "IN THE OFFICE"}</span>
+              <p>{summary}</p>
+            </section>
+          )}
+          {!preview && !replay && visibleAgents.some((a) => (a.history?.length ?? 0) > 1) && (
+            <button className="replay-entry" onClick={() => startOfficeReplay()}>Replay all sessions together</button>
           )}
           {!ready && <div className="loading-state">Opening the office…</div>}
           {!preview && !agents.length && (
@@ -385,7 +448,8 @@ export default function App() {
               <b>Make yourself at home.</b>
               <p>
                 Drag to orbit · scroll to zoom · right-drag to pan. Click a
-                character to say hello.
+                character to say hello. Pick up the toy hammer and click a coworker
+                to send their character to a desk. Escape or right-click puts it down.
               </p>
               <small>
                 Movement in the playground is animation, not agent activity.
@@ -408,7 +472,7 @@ export default function App() {
               {agent && (
                 <span className={`agent-behavior ${agent.status}`}>
                   {behavior(agent)}
-                  {replay?.id === agent.id ? " · recorded replay" : ""}
+                  {replay ? " · recorded replay" : ""}
                 </span>
               )}
               {agent && (
@@ -452,13 +516,14 @@ export default function App() {
                     <small>
                       Source event {new Date(agent.updatedAt).toLocaleString()}
                     </small>
+                    {agent.playback && <small className="context-note">{agent.playback.label}</small>}
                     {agent.history && agent.history.length > 1 && (
                       <button
                         className="replay-button"
-                        onClick={() => startReplay(agent)}
+                        onClick={() => startOfficeReplay()}
                       >
                         <Play size={13} />
-                        Replay last recorded task
+                        Replay all sessions together
                       </button>
                     )}
                     {local.enabled && (
@@ -479,8 +544,8 @@ export default function App() {
             </span>
             <div className="world-controls">
               <button
-                aria-label={paused ? "Resume walking" : "Pause walking"}
-                title={paused ? "Resume walking" : "Pause walking"}
+                aria-label={replay && replayElapsed >= replay.durationMs ? (paused ? "Resume animation" : "Pause animation") : (paused ? "Resume office" : "Pause office")}
+                title={replay && replayElapsed >= replay.durationMs ? "Replay finished · control idle animation" : (paused ? "Resume office" : "Pause office")}
                 onClick={() => setPaused(!paused)}
               >
                 {paused ? <Play size={17} /> : <Pause size={17} />}
@@ -530,7 +595,7 @@ export default function App() {
             : replay
               ? "Recorded task replay · no task is being executed"
               : local.enabled
-                ? `${agents.length} Robots sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
+                ? `${agents.length} Codex sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
                 : `${agents.length} imported agents · snapshot mode`}
         </span>
         <span>
@@ -560,8 +625,8 @@ export default function App() {
             <div className="eyebrow">BRING YOUR OWN LITTLE GUYS</div>
             <h2 id="import-title">Make room for your agents.</h2>
             <p>
-              Import a real office snapshot to see your team here. Your file
-              stays in this browser tab.
+              Import a real office snapshot to see your team here. Your agents
+              join this world and are saved in this browser.
             </p>
             <div className="connection-row">
               <span className="codex-symbol">⌘</span>
@@ -617,6 +682,16 @@ export default function App() {
           </section>
         </div>
       )}
+      {welcome && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onImport={(imported) => {
+        const merged = addAgents(imported);
+        local.disconnect();
+        autoStartReplay.current = false;
+        setPreview(false);
+        if (replay) setReplay(appendOfficeReplay(replay, imported, replayElapsed));
+        else startOfficeReplay(merged);
+        dismissWelcome();
+      }} />}
+
     </div>
   );
 }

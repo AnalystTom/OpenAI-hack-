@@ -2,9 +2,11 @@ import { DatabaseSync } from "node:sqlite";
 import { open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { toolActivityLabel } from "./activity-label.mjs";
 
 const MAX_TAIL_BYTES = 2 * 1024 * 1024;
 const ACTIVE_LEASE_MS = 5 * 60 * 1000;
+const DEMO_TITLES = ["Review recorded replay correctness", "Review 3D office movement", "Audit office accessibility", "Audit session import security", "Write five-minute Dots demo script", "Check Lovable deployment readiness"];
 const validTime = (value) => {
   const ms = typeof value === "number" ? value * 1000 : Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
@@ -78,7 +80,7 @@ export function parseSessionEvents(text, now = Date.now()) {
         typeof p.name === "string" && /^[a-zA-Z0-9_.-]{1,100}$/.test(p.name)
           ? p.name
           : "tool";
-      activity.push({ at, status, label: `Using ${name}` });
+      activity.push({ at, status, label: toolActivityLabel(name, p.arguments ?? p.input) });
     }
   }
   if (
@@ -101,7 +103,7 @@ export function parseSessionEvents(text, now = Date.now()) {
       { at: lastComplete.end, status: "idle", label: "Task completed" },
     ];
   }
-  return { status, contextUsed, contextWindow, updatedAt, history };
+  return { status, contextUsed, contextWindow, updatedAt, history, activityLabel: status === "working" ? activity.at(-1)?.label ?? null : null };
 }
 
 async function readTail(file) {
@@ -121,22 +123,29 @@ export async function readRobotsSessions({
   codexHome = path.join(homedir(), ".codex"),
   project = path.join(homedir(), "Dev", "Robots"),
   now = Date.now(),
+  titles = [],
+  threadIds = [],
+  includeArchived = false,
 } = {}) {
   const database = new DatabaseSync(path.join(codexHome, "state_5.sqlite"), {
     readOnly: true,
   });
   let rows, total;
   try {
+    const filters = `${includeArchived ? "" : "archived=0 AND "}cwd=? AND (length(name)>0 OR length(title)>0)`
+      + (titles.length ? ` AND name IN (${titles.map(() => "?").join(",")})` : "")
+      + (threadIds.length ? ` AND id IN (${threadIds.map(() => "?").join(",")})` : "");
+    const args = [project, ...titles, ...threadIds];
     total = database
       .prepare(
-        "SELECT count(*) AS count FROM threads WHERE archived=0 AND cwd=? AND (length(name)>0 OR length(title)>0)",
+        `SELECT count(*) AS count FROM threads WHERE ${filters}`,
       )
-      .get(project).count;
+      .get(...args).count;
     rows = database
       .prepare(
-        "SELECT id,name,title,model,updated_at,rollout_path FROM threads WHERE archived=0 AND cwd=? AND (length(name)>0 OR length(title)>0) ORDER BY updated_at DESC LIMIT 6",
+        `SELECT id,name,title,model,updated_at,rollout_path FROM threads WHERE ${filters} ORDER BY updated_at DESC LIMIT 6`,
       )
-      .all(project);
+      .all(...args);
   } finally {
     database.close();
   }
@@ -216,7 +225,17 @@ export function localCodexPlugin() {
           return;
         }
         try {
-          res.end(JSON.stringify(await readRobotsSessions()));
+          const source = new URL(req.url, "http://localhost").searchParams.get("source") ?? "robots";
+          if (!["robots", "demo", "design"].includes(source)) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: "Unknown session source." }));
+            return;
+          }
+          const options = source === "robots" ? {} : {
+            project: path.resolve(import.meta.dirname, ".."),
+            ...(source === "demo" ? { titles: DEMO_TITLES, includeArchived: true } : { threadIds: ["01a1126d-f25f-7162-ba0e-87456aba835d"] }),
+          };
+          res.end(JSON.stringify(await readRobotsSessions(options)));
         } catch {
           res.statusCode = 503;
           res.end(

@@ -39,6 +39,8 @@ export function parseOfficeSnapshot(text: string): OfficeSnapshot {
       throw new Error(
         "Each agent needs an id, name, harness, valid status, and updatedAt timestamp.",
       );
+    if (a.activityLabel !== undefined && a.activityLabel !== null && (typeof a.activityLabel !== "string" || a.activityLabel.length > 160))
+      throw new Error("Activity label must be short text or null.");
     if (a.history !== undefined) {
       if (!Array.isArray(a.history) || a.history.length > 100)
         throw new Error("History must contain at most 100 recorded events.");

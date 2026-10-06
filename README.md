@@ -37,6 +37,6 @@ In the import dialog choose **Import Robots sessions**. The local dev server rea
 - Recorded running work sends the character to a desk with a seated typing animation.
 - A completed/interrupted turn becomes idle and the character wanders with short pauses.
 - Missing, unreadable, or stale running state is unknown; connection loss stops work animation.
-- **Replay last recorded task** compresses that session's actual last completed task into 20 seconds, explicitly labelled as a replay. It does not execute or restart a task.
+- **Parallel session replay** starts every imported session's recorded task at T+0. A shared clock preserves event spacing and task durations, with 1×, 10× and 60× playback, pause and restart controls. It does not execute or restart actual tasks.
 
 This reader runs only on the loopback development server. The public site's remote pairing/upload flow is still owned by workstream 2. `server/codex-sessions.mjs` returns the shared `OfficeSnapshot` contract with optional recorded history and can inform that connector without exposing the local database.
