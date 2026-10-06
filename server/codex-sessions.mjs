@@ -1,3 +1,5 @@
+import { agentCostTracker } from "./agent-cost.mjs";
+import { runHealthTracker } from "./run-health.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -11,7 +13,7 @@ const validTime = (value) => {
 };
 
 /** Never interprets instructions or includes tool arguments/output from a rollout. */
-export function parseSessionEvents(text, now = Date.now()) {
+export function parseSessionEvents(text, now = Date.now(), currentModel = null) {
   let status = "unknown",
     contextUsed = null,
     contextWindow = null,
@@ -19,6 +21,8 @@ export function parseSessionEvents(text, now = Date.now()) {
   let lastComplete = null,
     activeStart = null;
   const activity = [];
+  const health = runHealthTracker();
+  const cost = agentCostTracker(currentModel);
   for (const line of text.split("\n")) {
     let event;
     try {
@@ -29,10 +33,13 @@ export function parseSessionEvents(text, now = Date.now()) {
     const p = event.payload;
     if (!p || !validTime(event.timestamp)) continue;
     const at = validTime(event.timestamp);
+    health.observe(event);
+    cost.observe(event);
     if (event.type === "event_msg") {
       if (p.type === "task_started") {
         status = "working";
         activeStart = at;
+        contextUsed = null;
         activity.push({ at, status, label: "Task started" });
       }
       if (p.type === "task_complete") {
@@ -54,6 +61,9 @@ export function parseSessionEvents(text, now = Date.now()) {
         const window = p.info.model_context_window;
         contextUsed = Number.isFinite(used) && used >= 0 ? used : null;
         contextWindow = Number.isFinite(window) && window > 0 ? window : null;
+      }
+      if (["error", "turn_failed"].includes(p.type)) {
+        status = "error"; updatedAt = at; activeStart = null;
       }
       // Settings changes do not constitute a heartbeat for running work.
       if (
@@ -101,7 +111,8 @@ export function parseSessionEvents(text, now = Date.now()) {
       { at: lastComplete.end, status: "idle", label: "Task completed" },
     ];
   }
-  return { status, contextUsed, contextWindow, updatedAt, history };
+  return { status, contextUsed, contextWindow, updatedAt, history,
+    health: health.snapshot(status, contextUsed, contextWindow), cost: cost.snapshot() };
 }
 
 async function readTail(file) {
@@ -119,7 +130,7 @@ async function readTail(file) {
 
 export async function readRobotsSessions({
   codexHome = path.join(homedir(), ".codex"),
-  project = path.join(homedir(), "Dev", "Robots"),
+  project = process.env.DOTS_CODEX_PROJECT || path.join(homedir(), "Dev", "Robots"),
   now = Date.now(),
 } = {}) {
   const database = new DatabaseSync(path.join(codexHome, "state_5.sqlite"), {
@@ -154,7 +165,7 @@ export async function readRobotsSessions({
         const rollout = await realpath(row.rollout_path);
         if (!rollout.startsWith(root + path.sep))
           throw new Error("Rollout is outside Codex data directory");
-        observed = parseSessionEvents(await readTail(rollout), now);
+        observed = parseSessionEvents(await readTail(rollout), now, row.model);
       } catch {
         /* Unreadable source remains explicitly unknown. */
       }

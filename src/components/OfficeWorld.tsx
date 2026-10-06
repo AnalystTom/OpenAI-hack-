@@ -257,6 +257,7 @@ function Walker({
   onSelect,
   label,
   status,
+  retrying = false,
 }: {
   kind: CharacterKind;
   index: number;
@@ -266,6 +267,7 @@ function Walker({
   onSelect: () => void;
   label?: string;
   status: AgentStatus | "preview";
+  retrying?: boolean;
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
@@ -282,7 +284,7 @@ function Walker({
   }, [kind]);
   useFrame((_, dt) => {
     if (!paused) elapsed.current += Math.min(dt, 0.05);
-    const pose = officePose(status, index, elapsed.current, total);
+    const pose = officePose(status, index, elapsed.current, total, retrying);
     if (parent.current) {
       const target = new THREE.Vector3(pose.x, pose.y, pose.z);
       const moving = parent.current.position.distanceTo(target) > 0.12;
@@ -398,6 +400,7 @@ export default function OfficeWorld({
             kind: a.character ?? agentCharacter(a.id, a.model, a.harness),
             label: a.name,
             status: a.status,
+            retrying: a.health?.retrying,
           }))
       ).map((a, i, array) => (
         <Walker

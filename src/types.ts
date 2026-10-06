@@ -13,6 +13,13 @@ export interface RecordedActivity {
   status: AgentStatus;
   label: string;
 }
+export interface RunHealth {
+  state: "healthy" | "watch" | "error" | "unknown";
+  retrying: boolean;
+  toolFailures: number;
+  retries: number;
+  recoveredRetries: number;
+}
 export interface OfficeAgent {
   id: string;
   name: string;
@@ -26,6 +33,8 @@ export interface OfficeAgent {
   character?: CharacterKind;
   sourceUrl?: string;
   history?: RecordedActivity[];
+  health?: RunHealth;
+  cost?: { estimatedUSD: number | null; observedRequests: number; unpricedRequests: number; assumedModelRequests: number };
 }
 export interface OfficeSnapshot {
   version: 1;

@@ -22,3 +22,24 @@ net: -5 lines applied.
 Follow-up review: Lean already. Ship.
 
 Validation: production build and eight parser, state-mapping, and local-request-boundary tests. Playwright verified real Robots import, recorded work at a desk, completion returning to idle, connection loss/recovery, and disconnect. The local feed reads session metadata only; hosted pairing remains separate.
+
+## Agent run health feature
+
+Reviewed the health/cost trackers, optional snapshot fields, context display, and
+retry pose on top of the Robots session feed. No dependencies or extra transport
+were added. The native progress element provides the context bar.
+
+Lean already. Ship.
+
+Validation: production build, source/health/cost/pose/snapshot tests and local
+browser check with the actual hackathon agent. Confirmed retry transitions are
+covered by fixtures; no real failed retry was forced for the browser demo.
+
+Context layout follow-up: moved the existing progress component outside the
+definition list so list flex rules cannot override it. No extra wrapper layer or
+dependency. Lean already. Ship. Verified full-width bar and unbroken percentage
+in the local browser; unavailable pricing now explains missing model/usage rates.
+
+Vitals polish review: one component groups the health badge, counts, cost and
+context display using scoped styles. Native progress and details elements handle
+bar semantics and estimate disclosure. No new dependencies. Lean already. Ship.
