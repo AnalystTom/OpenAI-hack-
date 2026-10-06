@@ -580,8 +580,6 @@ export default function OfficeWorld({
   }, [fireworkStartedAt]);
   function resetWithFireworks() {
     if (hasAgents) {
-      setHammerHits({});
-      setLastHit(null);
       setFireworkStartedAt(performance.now());
     }
   }
