@@ -42,8 +42,8 @@ export function parseOfficeSnapshot(text: string): OfficeSnapshot {
     if (a.cost !== undefined) {
       if (!a.cost || (a.cost.estimatedUSD !== null &&
           (typeof a.cost.estimatedUSD !== "number" || !Number.isFinite(a.cost.estimatedUSD) || a.cost.estimatedUSD < 0)) ||
-          ![a.cost.observedRequests, a.cost.unpricedRequests].every((n) => Number.isSafeInteger(n) && n >= 0) ||
-          a.cost.unpricedRequests > a.cost.observedRequests)
+          ![a.cost.observedRequests, a.cost.unpricedRequests, a.cost.assumedModelRequests].every((n) => Number.isSafeInteger(n) && n >= 0) ||
+          a.cost.unpricedRequests + a.cost.assumedModelRequests > a.cost.observedRequests)
         throw new Error("Cost must be an estimate or null, with an observed request count.");
     }
     if (a.health !== undefined) {

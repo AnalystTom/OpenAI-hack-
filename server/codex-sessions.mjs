@@ -13,7 +13,7 @@ const validTime = (value) => {
 };
 
 /** Never interprets instructions or includes tool arguments/output from a rollout. */
-export function parseSessionEvents(text, now = Date.now()) {
+export function parseSessionEvents(text, now = Date.now(), currentModel = null) {
   let status = "unknown",
     contextUsed = null,
     contextWindow = null,
@@ -22,7 +22,7 @@ export function parseSessionEvents(text, now = Date.now()) {
     activeStart = null;
   const activity = [];
   const health = runHealthTracker();
-  const cost = agentCostTracker();
+  const cost = agentCostTracker(currentModel);
   for (const line of text.split("\n")) {
     let event;
     try {
@@ -165,7 +165,7 @@ export async function readRobotsSessions({
         const rollout = await realpath(row.rollout_path);
         if (!rollout.startsWith(root + path.sep))
           throw new Error("Rollout is outside Codex data directory");
-        observed = parseSessionEvents(await readTail(rollout), now);
+        observed = parseSessionEvents(await readTail(rollout), now, row.model);
       } catch {
         /* Unreadable source remains explicitly unknown. */
       }

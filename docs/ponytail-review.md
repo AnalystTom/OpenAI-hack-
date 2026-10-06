@@ -34,3 +34,12 @@ Lean already. Ship.
 Validation: production build, source/health/cost/pose/snapshot tests and local
 browser check with the actual hackathon agent. Confirmed retry transitions are
 covered by fixtures; no real failed retry was forced for the browser demo.
+
+Context layout follow-up: moved the existing progress component outside the
+definition list so list flex rules cannot override it. No extra wrapper layer or
+dependency. Lean already. Ship. Verified full-width bar and unbroken percentage
+in the local browser; unavailable pricing now explains missing model/usage rates.
+
+Vitals polish review: one component groups the health badge, counts, cost and
+context display using scoped styles. Native progress and details elements handle
+bar semantics and estimate disclosure. No new dependencies. Lean already. Ship.

@@ -1,4 +1,4 @@
-import { ContextUsage } from "./components/ContextUsage";
+import { AgentVitals } from "./components/AgentVitals";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   ArrowDownToLine,
@@ -442,24 +442,8 @@ export default function App() {
                         <dt>Model</dt>
                         <dd>{agent.model ?? "Not reported"}</dd>
                       </div>
-                      <div>
-                        <dt>Observed cost (est.)</dt>
-                        <dd>{agent.cost?.estimatedUSD != null
-                          ? `${agent.cost.unpricedRequests ? "Partial " : ""}${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(agent.cost.estimatedUSD)}`
-                          : "Unavailable"}</dd>
-                      </div>
-                      <div>
-                        <dt>Context used</dt>
-                        <dd><ContextUsage used={agent.contextUsed} capacity={agent.contextWindow} /></dd>
-                      </div>
                     </dl>
-                    {agent.cost && <small className="context-note">Standard API equivalent · {agent.cost.observedRequests - agent.cost.unpricedRequests} of {agent.cost.observedRequests} observed requests priced. Recent log data; excludes tool fees and subscription billing.</small>}
-                    <p className="context-note">
-                      Run health: {agent.status === "offline" || agent.status === "unknown" || !agent.health
-                        ? "Not enough data" : agent.health.retrying ? "Retrying"
-                        : ({ healthy: "No issues observed", watch: "Issue observed", error: "Needs attention", unknown: "Not enough data" })[agent.health.state]}
-                      {agent.health && <> · {agent.health.toolFailures} tool failures · {agent.health.retries} retries · {agent.health.recoveredRetries} recovered</>}
-                    </p>
+                    <AgentVitals agent={agent} />
                     <small>
                       Source event {new Date(agent.updatedAt).toLocaleString()}
                     </small>

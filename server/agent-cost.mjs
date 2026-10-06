@@ -5,8 +5,8 @@ const rates = new Map([
   ["gpt-6.1-sol", [2, 0.1, 2.5, 10]],
   ["gpt-6-luna", [0.1, 0.01, 0.125, 0.5]],
 ]);
-export function agentCostTracker() {
-  let model = null, estimatedUSD = 0, observedRequests = 0, unpricedRequests = 0;
+export function agentCostTracker(currentModel = null) {
+  let model = null, estimatedUSD = 0, observedRequests = 0, unpricedRequests = 0, assumedModelRequests = 0;
   const seen = new Set();
   return {
     observe(event) {
@@ -22,19 +22,20 @@ export function agentCostTracker() {
       const key = JSON.stringify(total);
       if (seen.has(key)) return;
       seen.add(key); observedRequests++;
-      const price = rates.get(model);
+      const price = rates.get(model ?? currentModel);
       const input = usage?.input_tokens, cached = usage?.cached_input_tokens, output = usage?.output_tokens;
       const writes = usage?.cache_write_input_tokens ?? 0;
       if (!price || ![input, cached, writes, output].every((n) => Number.isSafeInteger(n) && n >= 0) || cached + writes > input) {
         unpricedRequests++; return;
       }
+      if (model === null) assumedModelRequests++;
       // Long-context requests surcharge the full request, not lifetime usage.
       const long = input > 272_000;
       estimatedUSD += ((input - cached - writes) * price[0] * (long ? 2 : 1) +
         cached * price[1] * (long ? 2 : 1) + writes * price[2] * (long ? 2 : 1) + output * price[3] * (long ? 1.5 : 1)) / 1_000_000;
     },
     snapshot() {
-      return { estimatedUSD: observedRequests === unpricedRequests ? null : estimatedUSD, observedRequests, unpricedRequests };
+      return { estimatedUSD: observedRequests === unpricedRequests ? null : estimatedUSD, observedRequests, unpricedRequests, assumedModelRequests };
     },
   };
 }

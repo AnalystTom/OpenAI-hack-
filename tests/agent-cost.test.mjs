@@ -22,7 +22,7 @@ test("missing model, unknown prices and incomplete tokens remain unavailable", (
   assert.equal(parse(model("unknown"), tokens(100, 0, 10)).cost.estimatedUSD, null);
   assert.equal(parse(model("gpt-6.1-sol"), tokens(100, 200, 10)).cost.estimatedUSD, null);
   assert.equal(parse(model("gpt-6.1-sol")).cost.estimatedUSD, null);
-  const agent = { id: "one", name: "Session", harness: "Codex", model: null, task: null, status: "idle", contextUsed: null, contextWindow: null, updatedAt: "2026-10-06T12:00:00Z", cost: { estimatedUSD: -1, observedRequests: 1, unpricedRequests: 0 } };
+  const agent = { id: "one", name: "Session", harness: "Codex", model: null, task: null, status: "idle", contextUsed: null, contextWindow: null, updatedAt: "2026-10-06T12:00:00Z", cost: { estimatedUSD: -1, observedRequests: 1, unpricedRequests: 0, assumedModelRequests: 0 } };
   assert.throws(() => parseOfficeSnapshot(JSON.stringify({ version: 1, agents: [agent] })), /Cost/);
 });
 
@@ -32,4 +32,11 @@ test("partial costs declare unpriced requests and include observed cache writes"
   assert.ok(Math.abs(cost.estimatedUSD - 0.0034) < 1e-10);
   assert.equal(cost.unpricedRequests, 1);
   assert.equal(cost.observedRequests, 2);
+});
+
+test("current-model fallback is explicitly marked as assumed, never a verified historical price", () => {
+  const cost = parseSessionEvents(tokens(1000, 800, 100), Date.now(), "gpt-6.1-sol").cost;
+  assert.ok(Math.abs(cost.estimatedUSD - 0.00148) < 1e-10);
+  assert.equal(cost.assumedModelRequests, 1);
+  assert.equal(parse(model("gpt-6.1-sol"), tokens(1000, 800, 100)).cost.assumedModelRequests, 0);
 });

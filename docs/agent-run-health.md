@@ -45,3 +45,12 @@ unchanged. The filter matches the working directory recorded by Codex exactly.
 
 Context displays both a filled usage bar and a percentage labelled used, with the
 reported token count and capacity underneath. Missing usage stays Not reported.
+
+When a request's model checkpoint is outside the bounded tail, the local feed can
+use the thread index's current model rate. These requests are counted separately
+and the amount is labelled Approximate with the assumption shown beside pricing
+coverage. Historical model changes outside the tail can therefore affect accuracy.
+
+Health uses a semantic status badge and separate failure/retry/recovery counts.
+Cost assumptions are available under Estimate details. The context bar is amber
+at 80% reported usage and red at 90%, with matching text warnings.

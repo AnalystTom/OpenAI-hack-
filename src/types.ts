@@ -34,7 +34,7 @@ export interface OfficeAgent {
   sourceUrl?: string;
   history?: RecordedActivity[];
   health?: RunHealth;
-  cost?: { estimatedUSD: number | null; observedRequests: number; unpricedRequests: number };
+  cost?: { estimatedUSD: number | null; observedRequests: number; unpricedRequests: number; assumedModelRequests: number };
 }
 export interface OfficeSnapshot {
   version: 1;

@@ -1,3 +1,13 @@
-.context-usage { width: 135px; max-width: 100%; display: grid; gap: 5px; text-align: right; }
-.context-usage progress { width: 100%; height: 8px; accent-color: #617747; }
-.context-usage small { color: #73806b; font-size: 10px; line-height: 1.4; }
+.context-usage { --context-fill: oklch(48% .085 130); display: grid; gap: 7px; padding: 14px 0 10px; margin-bottom: 5px; text-align: left; font-size: 11px; }
+.context-heading { display: flex; justify-content: space-between; gap: 10px; }
+.context-heading b { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.context-usage progress { appearance: none; width: 100%; height: 7px; border: 0; border-radius: 5px; overflow: hidden; background: oklch(89% .02 120); accent-color: var(--context-fill); }
+.context-usage progress::-webkit-progress-bar { background: oklch(89% .02 120); border-radius: 5px; }
+.context-usage progress::-webkit-progress-value { background: var(--context-fill); border-radius: 5px; }
+.context-usage progress::-moz-progress-bar { background: var(--context-fill); border-radius: 5px; }
+.context-usage small { color: var(--vitals-muted, oklch(48% .025 140)); font-size: 10px; line-height: 1.5; }
+.context-usage small strong { display: block; margin-top: 3px; color: var(--context-fill); font-weight: 600; }
+.context-usage[data-level="warning"] { --context-fill: oklch(53% .125 70); }
+.context-usage[data-level="critical"] { --context-fill: oklch(49% .17 25); }
+.night .context-usage[data-level="warning"] { --context-fill: oklch(79% .12 80); }
+.night .context-usage[data-level="critical"] { --context-fill: oklch(77% .13 25); }
