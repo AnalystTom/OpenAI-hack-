@@ -1,3 +1,4 @@
+import { ContextUsage } from "./components/ContextUsage";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   ArrowDownToLine,
@@ -71,6 +72,8 @@ export default function App() {
       return {
         ...a,
         status: recordedEvent?.status ?? ("working" as const),
+        health: undefined,
+        cost: undefined,
         contextUsed: null,
         contextWindow: null,
       };
@@ -263,7 +266,7 @@ export default function App() {
             {local.enabled && (
               <div className="connection-summary">
                 <b>
-                  Robots ·{" "}
+                  Local ·{" "}
                   {local.state === "connected" ? "local feed" : local.state}
                 </b>
                 <span>
@@ -347,7 +350,7 @@ export default function App() {
             local.state === "loading" &&
             !agents.length && (
               <div className="connection-banner" role="status">
-                Reading your Robots sessions…
+                Reading your local sessions…
               </div>
             )}
           {!preview && local.error && (
@@ -440,15 +443,23 @@ export default function App() {
                         <dd>{agent.model ?? "Not reported"}</dd>
                       </div>
                       <div>
-                        <dt>Context</dt>
-                        <dd>
-                          {agent.contextUsed !== null &&
-                          agent.contextWindow !== null
-                            ? `${Math.round((agent.contextUsed / agent.contextWindow) * 100)}%`
-                            : "Not reported"}
-                        </dd>
+                        <dt>Observed cost (est.)</dt>
+                        <dd>{agent.cost?.estimatedUSD != null
+                          ? `${agent.cost.unpricedRequests ? "Partial " : ""}${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(agent.cost.estimatedUSD)}`
+                          : "Unavailable"}</dd>
+                      </div>
+                      <div>
+                        <dt>Context used</dt>
+                        <dd><ContextUsage used={agent.contextUsed} capacity={agent.contextWindow} /></dd>
                       </div>
                     </dl>
+                    {agent.cost && <small className="context-note">Standard API equivalent · {agent.cost.observedRequests - agent.cost.unpricedRequests} of {agent.cost.observedRequests} observed requests priced. Recent log data; excludes tool fees and subscription billing.</small>}
+                    <p className="context-note">
+                      Run health: {agent.status === "offline" || agent.status === "unknown" || !agent.health
+                        ? "Not enough data" : agent.health.retrying ? "Retrying"
+                        : ({ healthy: "No issues observed", watch: "Issue observed", error: "Needs attention", unknown: "Not enough data" })[agent.health.state]}
+                      {agent.health && <> · {agent.health.toolFailures} tool failures · {agent.health.retries} retries · {agent.health.recoveredRetries} recovered</>}
+                    </p>
                     <small>
                       Source event {new Date(agent.updatedAt).toLocaleString()}
                     </small>
@@ -530,7 +541,7 @@ export default function App() {
             : replay
               ? "Recorded task replay · no task is being executed"
               : local.enabled
-                ? `${agents.length} Robots sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
+                ? `${agents.length} local sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
                 : `${agents.length} imported agents · snapshot mode`}
         </span>
         <span>
@@ -567,7 +578,7 @@ export default function App() {
               <span className="codex-symbol">⌘</span>
               <div>
                 <b>Codex</b>
-                <small>Read sessions from your local Robots project</small>
+                <small>Read sessions from your configured local project</small>
               </div>
               <span className="connection-status">
                 {local.state === "connected" ? "Connected" : "Local only"}
@@ -576,7 +587,7 @@ export default function App() {
             <button className="file-import" onClick={connectRobots}>
               <Users size={19} />
               <span>
-                <b>Import Robots sessions</b>
+                <b>Import local sessions</b>
                 <small>
                   6 recent sessions · read-only · refreshes every 5s
                 </small>
