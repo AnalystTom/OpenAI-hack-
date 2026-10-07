@@ -83,3 +83,32 @@ Uses the existing snapshot importer, storage serializer, room invitations, insta
 net: -4 lines applied.
 
 Follow-up review: Lean already. Ship. The carpet renderer and walk path share officeLayout bounds; the existing shared animation clock keeps new arrivals synchronized. Verified source statuses remain unchanged.
+
+## Shared live rooms and mobile cleanup
+
+GPT-6.1 Sol high cleanup and individual mobile, authorization, lifecycle and hosted test agents reviewed this change. Medical UI and its unused endpoints/components, hardcoded source choices, automatic demo population, and automatic snapshot replay were removed.
+
+1. src/components/ContextUsage.tsx: delete: component and CSS have no callers after medical panel removal. Removed.
+2. src/officeReplay.ts: delete: appendOfficeReplay and its start offsets have no application callers. Removed along with append-only tests; retained source-timeline replay checks.
+3. server/live-room.mjs: delete: assignments immediately discarded before participant removal. Removed.
+
+net: -44 production lines applied for these findings. Follow-up: Lean already. Ship.
+
+Verification uses actual Codex source sessions in fresh Playwright contexts. Desktop/mobile new users create and join rooms, preserve session identity across reload, copy invitations/prompts, and disconnect only their own agents. A real cleanup task was observed idle → working → idle in two browsers. Real bridge heartbeat loss/recovery and credential revocation passed. Three mobile sizes (320×740,390×844,760×390) passed with no browser errors or horizontal overflow. The React nested-root warnings were fixed by moving accessible toy controls outside the Canvas; no checks or StrictMode were disabled.
+
+## Disconnected departures and animated showcase
+
+Reviewed the relay's expiry/seat accounting, browser reconnect handling, and two decorative characters that reuse the existing assets, walker, poses, and labels without creating session records.
+
+1. Delete: the unused empty-room overlay styles and entered-office storage constant after removing the floating call to action. Addressed.
+
+Follow-up review: Lean already. Ship.
+
+Validation: 58 unit tests and production build pass. Fresh Playwright at 1280×900, 320×740, and 390×844 verifies separate demo counts, actual snapshot imports, browser offline/reconnect with stable session identities, and no renderer errors. The complete 68-second showcase loop was observed in real time. Real bridge expiry removes agents from two viewers and restart restores their original IDs; expired agents release seats while reconnects still respect the 50-agent limit. The browser network test also found a detached label sprite during removal; frame layout now skips detached sprites.
+
+## Production release review
+
+1. Delete: remaining replay-only styles after replay removal. Addressed.
+2. Shrink: local source picker, state, storage, and query for one supported workspace. Replaced with one local-watch button. Addressed.
+
+Final review: Lean already. Ship. Production build and all 62 tests pass. Compact labels and the subsequently requested 30-minute disconnected retention are preserved.

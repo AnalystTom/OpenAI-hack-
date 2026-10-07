@@ -1,16 +1,12 @@
-import { FirstAidPanel } from "./components/FirstAidPanel";
-import { AgentVitals } from "./components/AgentVitals";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowUpRight,
-  Box,
   ChevronRight,
   CircleHelp,
   Coffee,
   Globe2,
   Heart,
-  HeartPulse,
   Maximize,
   Moon,
   MousePointer2,
@@ -25,24 +21,24 @@ import {
   X,
 } from "lucide-react";
 import OfficeWorld, { CHARACTERS } from "./components/OfficeWorld";
-import type { AgentInteraction, OfficeAgent } from "./types";
+import { SHOWCASE_CHARACTERS, showcaseState, type ShowcaseState } from "./showcase";
+import "./components/office/showcase.css";
+import type { AgentInteraction, OfficeAgent, OfficeSnapshot } from "./types";
 import {
-  createOfficeReplay,
-  appendOfficeReplay,
   agentActivityLabel,
-  replayOffice,
+  agentDisplayName,
+  agentIsVisible,
+  DISCONNECTED_RETENTION_MS,
   officeSummary,
-  replayClockLabel,
-  type OfficeReplay,
-} from "./officeReplay";
+} from "./officeActivity";
 import { agentCharacter, STATUS_LABELS, liveInteractions } from "./officeBehavior";
 import { useRobotsSessions } from "./integrations/codex/useRobotsSessions";
+import { useLiveRoom } from "./integrations/codex/useLiveRoom";
+import LiveRoomBar from "./components/import/LiveRoomBar";
 import Welcome from "./components/import/Welcome";
-import { mergeOfficeAgents, readSavedOffice, serializeOffice, OFFICE_STORAGE_KEY, ENTERED_STORAGE_KEY } from "./officeStore";
+import { mergeOfficeAgents, readSavedOffice, serializeOffice, OFFICE_STORAGE_KEY } from "./officeStore";
 
 import RoomStudio from "./components/RoomStudio";
-import projectExampleSource from "./data/project-example.json";
-import { parseOfficeSnapshot } from "./snapshot";
 import {
   DEFAULT_SHARE, EMPTY_PROFILE, EMPTY_STATS, readGuestRoom,
   type GuestRoom, type KnowledgeBook, type RoomProfile, type RoomProject,
@@ -66,33 +62,29 @@ function readRoomDraft() {
   } catch { return null; }
 }
 const roomDraft = readRoomDraft();
-const projectExample = parseOfficeSnapshot(JSON.stringify(projectExampleSource));
 
 export default function App() {
+  const live = useLiveRoom();
   const [saved] = useState(() => {
     try { return readSavedOffice(localStorage); }
     catch { return { agents: [], interactions: [], error: "Browser storage is unavailable. Your office cannot be saved on this device." }; }
   });
-  const showProjectExampleInitially = import.meta.env.PROD && !saved.agents.length && !window.location.hash && projectExample.agents.length > 0;
-  const [welcome, setWelcome] = useState(() => {
-    if (showProjectExampleInitially) return false;
-    try { return localStorage.getItem(ENTERED_STORAGE_KEY) !== "yes"; } catch { return true; }
-  });
-  const [agents, setAgents] = useState<OfficeAgent[]>(saved.agents);
+  const [welcome, setWelcome] = useState(false);
+  const [showcaseActivities, setShowcaseActivities] = useState(() => SHOWCASE_CHARACTERS.map((_, index) => showcaseState(0, index)));
+  function updateShowcase(index: number, activity: ShowcaseState) {
+    setShowcaseActivities(current => current[index].phase === activity.phase ? current : current.map((state, i) => i === index ? activity : state));
+  }
+  const [agents, setAgents] = useState<OfficeAgent[]>(() => saved.agents.map(agent => ({ ...agent,
+    status: agent.status === 'working' ? 'unknown' : agent.status,
+  })));
   const agentsRef = useRef(agents);
-  const showProjectExample = showProjectExampleInitially && agents.length === 0;
   const [officeError, setOfficeError] = useState(saved.error);
-  const [interactions, setInteractions] = useState<AgentInteraction[]>(() => showProjectExampleInitially ? projectExample.interactions ?? [] : saved.interactions);
+  const [interactions, setInteractions] = useState<AgentInteraction[]>(saved.interactions);
   const [interactionClock, setInteractionClock] = useState(Date.now());
-  const [preview, setPreview] = useState(
-    () => !showProjectExampleInitially && !saved.agents.length && sessionStorage.getItem("dots-robots-connected") !== "yes",
-  );
   const [paused, setPaused] = useState(false);
   const [night, setNight] = useState(false);
   const [cameraKey, setCameraKey] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [firstAid, setFirstAid] = useState(false);
-  const firstAidButton = useRef<HTMLButtonElement>(null);
   const [help, setHelp] = useState(false);
   const [ready, setReady] = useState(false);
   const [studioTab, setStudioTab] = useState<"profile" | "social" | "library" | "projects" | "invite" | null>(null);
@@ -115,11 +107,9 @@ export default function App() {
     return () => window.removeEventListener("hashchange", update);
   }, []);
   const office = useRef<HTMLDivElement>(null);
-  const showPreview = !guest && preview;
   const visibleProfile = guest?.profile ?? profile;
   const visibleBooks = guest?.books ?? books;
   const visibleProjects = guest?.projects ?? projects;
-  const character = !guest ? CHARACTERS.find((c) => c.kind === selected) : undefined;
   function addAgents(incoming: OfficeAgent[], incomingLinks: AgentInteraction[] = []) {
     const merged = mergeOfficeAgents(agentsRef.current, incoming);
     const links = [...new Map([...interactions, ...incomingLinks].map((link) => [
@@ -133,62 +123,36 @@ export default function App() {
     setOfficeError("");
     return merged;
   }
-  function dismissWelcome() {
-    setWelcome(false);
-    try { localStorage.setItem(ENTERED_STORAGE_KEY, "yes"); }
-    catch { setOfficeError("Browser storage is unavailable. The welcome card will reappear on refresh."); }
-  }
+  function dismissWelcome() { setWelcome(false); }
+  const [localSnapshot, setLocalSnapshot] = useState<OfficeSnapshot>({ version: 1, agents: [] });
   const local = useRobotsSessions((snapshot) => {
-    autoStartReplay.current = false;
     setInteractions(snapshot.interactions ?? []);
     setInteractionClock(Date.now());
-    const incoming = snapshot.agents;
-    if (!incoming.length) return;
-    try { addAgents(incoming); } catch (e) { setOfficeError(e instanceof Error ? e.message : "Unable to save office."); }
+    setLocalSnapshot(snapshot);
   });
-  const [replay, setReplay] = useState<OfficeReplay | null>(() => showProjectExampleInitially ? createOfficeReplay(projectExample.agents) : null);
-  const [replayElapsed, setReplayElapsed] = useState(0);
-  const [replaySpeed, setReplaySpeed] = useState(1);
-  const autoStartReplay = useRef(true);
-  function startOfficeReplay(source = showProjectExample ? projectExample.agents : agents) {
-    setReplay(createOfficeReplay(source));
-    setReplayElapsed(0);
-    setPaused(false);
-  }
+  const visibleAgents = (local.enabled ? localSnapshot.agents : agents).map((a) =>
+    local.enabled ? { ...a, ownerName: a.ownerName ?? localStorage.getItem('dots-uploader-name') ?? undefined,
+      status: local.state === 'connected' ? a.status : 'offline' as const,
+      disconnectedAt: local.state === 'connected' ? a.disconnectedAt : local.disconnectedAt } : a,
+  );
   useEffect(() => {
-    if (!agents.length || !autoStartReplay.current) return;
-    autoStartReplay.current = false;
-    startOfficeReplay(agents);
-  }, [agents]);
-  useEffect(() => {
-    if (!replay || paused || replayElapsed >= replay.durationMs) return;
-    let last = performance.now();
-    const timer = setInterval(() => {
-      const now = performance.now(),
-        delta = now - last;
-      last = now;
-      setReplayElapsed((elapsed) =>
-        Math.min(replay.durationMs, elapsed + delta * replaySpeed),
-      );
-    }, 100);
-    return () => clearInterval(timer);
-  }, [replay, paused, replaySpeed, replayElapsed >= (replay?.durationMs ?? 0)]);
-  const visibleAgents = replay
-    ? replayOffice(replay, replayElapsed)
-    : (showProjectExample ? projectExample.agents : agents).map((a) =>
-        local.enabled && local.state === "error"
-          ? { ...a, status: "offline" as const }
-          : a,
-      );
-  const summary = officeSummary(visibleAgents, !!replay);
-  useEffect(() => {
-    if (!interactions.length) return;
+    if (!interactions.length && !live.interactions.length) return;
     const timer = setInterval(() => setInteractionClock(Date.now()), 5000);
     return () => clearInterval(timer);
-  }, [interactions.length]);
-  const roomAgents = guest?.agents ?? visibleAgents;
-  const activeLinks = guest || showPreview || replay || (local.enabled && local.state !== "connected")
-    ? [] : liveInteractions(roomAgents, interactions, interactionClock);
+  }, [interactions.length, live.interactions.length]);
+  const sourceAgents = live.roomId ? live.agents : guest?.agents ?? visibleAgents;
+  const roomAgents = sourceAgents.filter(agent => agentIsVisible(agent));
+  useEffect(() => {
+    const expires = sourceAgents.filter(agent => agent.status === 'offline' && agentIsVisible(agent))
+      .map(agent => Date.parse(agent.disconnectedAt ?? agent.updatedAt) + DISCONNECTED_RETENTION_MS);
+    if (!expires.length) return;
+    const timer = setTimeout(() => setInteractionClock(Date.now()), Math.max(1, Math.min(...expires) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [sourceAgents, interactionClock]);
+  const summary = officeSummary(roomAgents);
+  const activeLinks = live.roomId ? liveInteractions(roomAgents, live.interactions, interactionClock)
+    : guest || (local.enabled && local.state !== "connected")
+      ? [] : liveInteractions(roomAgents, interactions, interactionClock);
   const linkedPartner = (id: string) => {
     const link = activeLinks.find((item) => item.fromId === id || item.toId === id);
     return link && roomAgents.find((item) => item.id === (link.fromId === id ? link.toId : link.fromId));
@@ -196,41 +160,29 @@ export default function App() {
   const agent = roomAgents.find((a) => a.id === selected);
   const book = visibleBooks.find((item) => item.id === selectedBook);
   const project = visibleProjects.find((item) => item.id === selectedProject);
-  function openFirstAid() { setSelected(null); setSelectedBook(null); setSelectedProject(null); setFirstAid(true); }
-  function selectAgent(id: string) { setFirstAid(false); setSelected(id); setSelectedBook(null); setSelectedProject(null); }
-  function selectBook(id: string) { setFirstAid(false); setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
-  function selectProject(id: string) { setFirstAid(false); setSelected(null); setSelectedBook(null); setSelectedProject(id); }
+  function selectAgent(id: string) { setSelected(id); setSelectedBook(null); setSelectedProject(null); }
+  function selectBook(id: string) { setSelected(null); setSelectedProject(null); setSelectedBook(id); setOpenedBooks((current) => current.includes(id) ? current : [...current, id]); }
+  function selectProject(id: string) { setSelected(null); setSelectedBook(null); setSelectedProject(id); }
   function leaveGuest() { window.location.hash = ""; setGuest(null); }
   function joinGuest() {
     if (!guest) return;
     try {
       const incoming = guest.agents.map((a) => ({ ...a, id: `invite:${guest.createdAt}:${a.id}` }));
-      const merged = addAgents(incoming);
+      addAgents(incoming);
       local.disconnect();
-      autoStartReplay.current = false;
-      setPreview(false);
       setPaused(false);
-      if (replay && !showProjectExample) setReplay(appendOfficeReplay(replay, incoming, replayElapsed));
-      else startOfficeReplay(merged);
       leaveGuest();
       dismissWelcome();
     } catch (e) { setOfficeError(e instanceof Error ? e.message : "Unable to join this snapshot."); }
   }
   const behavior = (a: OfficeAgent) => linkedPartner(a.id) ? `Working with ${linkedPartner(a.id)!.name}` : agentActivityLabel(a) ?? STATUS_LABELS[a.status];
-  function watchLocal(source: string) {
-    autoStartReplay.current = false;
-    setReplay(null);
+  function watchLocal() {
     setSelected(null);
-    setPreview(false);
     setWelcome(false);
     setPaused(false);
-    local.connect(source);
+    local.connect();
   }
 
-  function switchView(value: boolean) {
-    setPreview(value);
-    setSelected(null);
-  }
   return (
     <div className="app">
       <header className="topbar">
@@ -247,21 +199,11 @@ export default function App() {
         <span className="office-name">
           The little office <span>HQ</span>
         </span>
-        {guest ? <nav aria-label="Shared room"><span className="guest-nav-label">Visiting {guest.profile.displayName}</span><button onClick={leaveGuest}>Back to my room</button></nav> : <nav aria-label="Office views">
-          <button
-            className={preview ? "active" : ""}
-            onClick={() => switchView(true)}
-          >
-            <Box size={15} />
-            Characters
-          </button>
-          <button
-            className={!preview ? "active" : ""}
-            onClick={() => switchView(false)}
-          >
+        {guest ? <nav aria-label="Shared room"><span className="guest-nav-label">Visiting {guest.profile.displayName}</span><button onClick={leaveGuest}>Back to my room</button></nav> : <nav aria-label="Agents">
+          <span className="agents-heading">
             <Users size={15} />
-            Your agents {roomAgents.length > 0 && <small>{roomAgents.length}</small>}
-          </button>
+            Agents {roomAgents.length > 0 && <small>{roomAgents.length}</small>}
+          </span>
         </nav>}
         <div className="topbar-actions">
           {guest && <button className="import-button" onClick={joinGuest}><Users size={15} /> Join snapshot with my agents</button>}
@@ -273,44 +215,14 @@ export default function App() {
       <main>
         <aside className={`sidebar ${guest ? "guest-sidebar" : ""}`}>
           <div className="eyebrow"><span /> {guest ? "FRIEND'S ROOM" : "A NEW WAY TO WORK"}</div>
-          <h1>{guest ? guest.profile.displayName : profile.displayName === "My room" ? <>Big ideas.<br />Little coworkers<span>.</span></> : <>{profile.displayName}<span>.</span></>}</h1>
-          <p className="intro">{guest ? "Join combines these shared agents with yours in this browser. Changes are not sent to the host." : profile.interests || "Bring your Codex sessions into a little 3D office. See their activity, replay their work, and make the room yours."}</p>
+          <h1>{guest ? guest.profile.displayName : profile.displayName === "My room" ? <>Big ideas.<br />{" "}Little coworkers<span>.</span></> : <>{profile.displayName}<span>.</span></>}</h1>
+          <p className="intro">{guest ? "Join combines these shared agents with yours in this browser. Changes are not sent to the host." : profile.interests || "Bring your Codex sessions into a little 3D office. See their activity and make the room yours."}</p>
           {visibleProfile.socialUrl && <a className="social-link" href={visibleProfile.socialUrl} target="_blank" rel="noreferrer">View social profile <ArrowUpRight size={12} /></a>}
           <div className="section-heading">
-            {showPreview ? "MEET THE LITTLE GUYS" : guest ? "SHARED AGENTS" : "YOUR OFFICE"}
-            <span>{showPreview ? CHARACTERS.length : roomAgents.length}</span>
+            {guest ? "SHARED AGENTS" : "YOUR OFFICE"}
+            <span>{roomAgents.length}</span>
           </div>
-          {showPreview ? (
-            <div className="roster">
-              {CHARACTERS.map((c) => (
-                <button
-                  key={c.kind}
-                  className={`roster-item ${selected === c.kind ? "selected" : ""}`}
-                  onClick={() => selectAgent(c.kind)}
-                >
-                  <span
-                    className={`avatar ${c.kind}`}
-                    style={{ "--avatar": c.color } as React.CSSProperties}
-                  >
-                    {c.kind === "lovable" ? (
-                      <Heart size={21} fill="currentColor" />
-                    ) : (
-                      <span className="eyes">••</span>
-                    )}
-                  </span>
-                  <span>
-                    <b>{c.name}</b>
-                    <small>
-                      {c.kind === "lovable"
-                        ? "Lovable heart"
-                        : "Dots character"}
-                    </small>
-                  </span>
-                  <ChevronRight size={15} />
-                </button>
-              ))}
-            </div>
-          ) : roomAgents.length ? (
+          {roomAgents.length ? (
             <div className="roster">
               {roomAgents.map((a) => (
                 <button
@@ -334,7 +246,7 @@ export default function App() {
                     <span className="eyes">••</span>
                   </span>
                   <span>
-                    <b title={a.name}>{a.name}</b>
+                    <b title={agentDisplayName(a)}>{agentDisplayName(a)}</b><small>{a.name}</small>
                     <small>{behavior(a)}</small>
                   </span>
                   <ChevronRight size={15} />
@@ -349,39 +261,37 @@ export default function App() {
               {!guest && <button onClick={() => setWelcome(true)}>Bring your agents <ArrowUpRight size={14} /></button>}
             </div>
           )}
-          <div className="room-collections">
-            <button onClick={() => guest ? visibleBooks[0] && selectBook(visibleBooks[0].id) : setStudioTab("library")}><BookOpen size={15} /><span>Learning library</span><b>{visibleBooks.length}</b></button>
+          <section className="showcase-activity" aria-label="Showcase activity">
+            <b>Showcase · animated demo</b>
+            {SHOWCASE_CHARACTERS.map((character, index) => <div key={character.id} data-showcase-id={character.id} data-phase={showcaseActivities[index].phase}>
+              <span>{character.name}</span><small>{showcaseActivities[index].label}</small>
+            </div>)}
+          </section>
+          {!guest && <LiveRoomBar live={live} onImport={() => setWelcome(true)} />}
+          {(visibleBooks.length > 0 || visibleProjects.length > 0) && <div className="room-collections">
+            {visibleBooks.length > 0 && <button onClick={() => guest ? selectBook(visibleBooks[0].id) : setStudioTab("library")}><BookOpen size={15} /><span>Learning library</span><b>{visibleBooks.length}</b></button>}
             {visibleBooks.length > 0 && <small>{openedBooks.filter((id) => visibleBooks.some((item) => item.id === id)).length} of {visibleBooks.length} books explored</small>}
-            <button onClick={() => guest ? visibleProjects[0] && selectProject(visibleProjects[0].id) : setStudioTab("projects")}><Sparkles size={15} /><span>Project wall</span><b>{visibleProjects.length}</b></button>
-          </div>
+            {visibleProjects.length > 0 && <button onClick={() => guest ? selectProject(visibleProjects[0].id) : setStudioTab("projects")}><Sparkles size={15} /><span>Project wall</span><b>{visibleProjects.length}</b></button>}
+          </div>}
           {guest?.stats && <div className="friend-stats"><b>Shared totals</b><span>Tokens <strong>{guest.stats.totalTokens === null ? "Not shared" : guest.stats.totalTokens.toLocaleString()}</strong></span><span>Spend <strong>{guest.stats.totalSpend === null ? "Not shared" : `${guest.stats.currency} ${guest.stats.totalSpend.toFixed(2)}`}</strong></span><small>Owner-entered snapshot</small></div>}
           <div className="sidebar-bottom">
-            {!guest && import.meta.env.DEV && <div className="local-source-controls">
-              <label htmlFor="local-source">Watch local Codex sessions</label>
-              <select id="local-source" value={local.enabled ? local.source : ""} onChange={(e) => watchLocal(e.target.value)}>
-                <option value="" disabled>Choose a source</option>
-                <option value="workspace">Current workspace</option>
-                <option value="robots">Robots sessions</option>
-                <option value="demo">Six Luna demo sessions</option>
-                <option value="design">Design Codex session replay</option>
-              </select>
-              {local.enabled && <button onClick={() => { setReplay(null); setPaused(false); }}>Watch live status</button>}
+            {!guest && !live.roomId && import.meta.env.DEV && <div className="local-source-controls">
+              <button onClick={watchLocal}>Watch local Codex sessions</button>
             </div>}
-            {!guest && local.enabled && (
+            {!guest && !live.roomId && local.enabled && (
               <div className="connection-summary">
                 <b>
                   {local.project || "Codex"} ·{" "}
                   {local.state === "connected" ? "local feed" : local.state}
                 </b>
                 <span>
-                  {agents.length} recent sessions
+                  {roomAgents.length} recent sessions
                   {local.total ? ` of ${local.total}` : ""}
                 </span>
                 <button
                   onClick={() => {
                     local.disconnect();
-                    setReplay(null);
-                    // Disconnecting the feed keeps the saved residents.
+                    // Disconnecting hides the feed and retains saved snapshots.
                     setInteractions([]);
                   }}
                 >
@@ -393,13 +303,10 @@ export default function App() {
             <div className="coffee-note">
               <Coffee size={18} />
               <p>
-                {showPreview
-                  ? "No meetings. Just little guys."
-                  : guest ? "A friend's shared world." : "A window into your team."}
+                {guest ? "A friend's shared world." : "A window into your team."}
                 <small>
-                  {showPreview
-                    ? "Character preview · no live agent activity"
-                    : guest ? "Read-only invitation snapshot" : local.enabled
+                  {guest ? "Read-only invitation snapshot" : live.roomId
+                      ? `Live room · ${live.state}` : local.enabled
                       ? "Recorded status and links · refreshed every 5s"
                       : "Imported snapshots are not live connections."}
                 </small>
@@ -415,17 +322,9 @@ export default function App() {
           <div className="world-top">
             <div className="world-caption">
               <span className="live-dot" />
-              {showPreview
-                ? "CHARACTER PLAYGROUND"
-                : guest ? "FRIEND'S ROOM" : replay
-                  ? "RECORDED TASK REPLAY"
-                  : "YOUR AGENT OFFICE"}
+              {!roomAgents.length ? "Showcase · animated demo" : guest ? "FRIEND'S ROOM" : live.roomId ? "LIVE AGENT ROOM" : "YOUR AGENT OFFICE"}
               <span className="mode-label">
-                {showPreview
-                  ? "Preview"
-                  : guest ? "Shared snapshot" : replay
-                    ? "Replay"
-                    : local.enabled
+                {guest ? "Shared snapshot" : live.roomId ? live.state : local.enabled
                       ? local.state === "connected"
                         ? "Local feed"
                         : local.state
@@ -444,7 +343,6 @@ export default function App() {
           <OfficeWorld
             agents={roomAgents}
             interactions={activeLinks}
-            preview={showPreview}
             paused={paused}
             night={night}
             cameraKey={cameraKey}
@@ -457,11 +355,11 @@ export default function App() {
             selectedProject={selectedProject}
             onSelectBook={selectBook}
             onSelectProject={selectProject}
-            onInvite={guest ? undefined : () => setStudioTab("invite")}
-            onFirstAid={guest ? undefined : openFirstAid}
             onReady={() => setReady(true)}
+            showcaseActivities={showcaseActivities}
+            onShowcaseActivity={updateShowcase}
           />
-          {!guest && !showPreview &&
+          {!guest && !live.roomId &&
             local.enabled &&
             local.state === "loading" &&
             !agents.length && (
@@ -469,46 +367,16 @@ export default function App() {
                 Reading your Codex sessions…
               </div>
             )}
-          {!guest && !showPreview && !replay && local.error && (
+          {!guest && !live.roomId && local.error && (
             <div className="connection-banner error" role="alert">
               {local.error}
             </div>
           )}
-          {!guest && !showPreview && replay && (
-            <div className="replay-banner" role="status">
-              <b>{showProjectExample ? "Recorded project sessions" : "Parallel session replay"}</b>
-              {showProjectExample && <span>{projectExample.agents.length} real sessions · recorded activity</span>}
-              <span className="replay-clock">
-                T+{replayClockLabel(replayElapsed)} · aligned task starts
-              </span>
-              <label className="replay-speed">
-                Speed{" "}
-                <select
-                  aria-label="Replay speed"
-                  value={replaySpeed}
-                  onChange={(e) => setReplaySpeed(Number(e.target.value))}
-                >
-                  <option value={1}>1×</option>
-                  <option value={10}>10×</option>
-                  <option value={60}>60×</option>
-                </select>
-              </label>
-              <button onClick={() => startOfficeReplay(replay.agents)}>
-                Restart all sessions
-              </button>
-              <button onClick={() => setReplay(null)}>
-                Show latest snapshot
-              </button>
-            </div>
-          )}
-          {!guest && !showPreview && visibleAgents.length > 0 && (
+          {!guest && roomAgents.length > 0 && (
             <section className="office-summary" aria-label="Office summary">
-              <span>{replay ? "REPLAY" : "IN THE OFFICE"}</span>
+              <span>IN THE OFFICE</span>
               <p>{summary}</p>
             </section>
-          )}
-          {!guest && !showPreview && !replay && visibleAgents.some((a) => (a.history?.length ?? 0) > 1) && (
-            <button className="replay-entry" onClick={() => startOfficeReplay()}>Replay all sessions together</button>
           )}
           {activeLinks.length > 0 && <div className="collaboration-banner" role="status">
             <b>Recent session link</b>
@@ -521,33 +389,22 @@ export default function App() {
             })}
           </div>}
           {!ready && <div className="loading-state">Opening the office…</div>}
-          {!guest && !showPreview && !roomAgents.length && (
-            <div className="world-empty">
-              <span className="empty-icon">
-                <Users size={22} />
-              </span>
-              <h2>Your team belongs here.</h2>
-              <p>Connect the dots. Start with your agents.</p>
-              <button className="import-button" onClick={() => setWelcome(true)}>
-                Import agents <ArrowUpRight size={15} />
-              </button>
-            </div>
-          )}
           {help && (
             <div className="help-card">
               <b>Make yourself at home.</b>
               <p>
-                Drag to orbit · scroll to zoom · right-drag to pan. Click a
-                character to say hello. Pick up the toy hammer and click a coworker
-                to send their character to a desk. Escape or right-click puts it down.
+                Overview fits the room · Top view shows the floor plan. Drag to orbit,
+                scroll or use +/− to zoom, and enable Pan or right-drag to move. On touchscreens,
+                pinch to zoom and use two fingers to pan. Click a
+                agent to see its activity. The two showcase characters run an animated demo loop. Pick up the toy hammer and tap a coworker.
+                Escape or right-click puts it down.
               </p>
               <small>
                 Live positions follow recorded session state. Play appears only after a recent recorded link between two working sessions.
               </small>
             </div>
           )}
-          {firstAid && !guest && <FirstAidPanel onClose={() => { setFirstAid(false); firstAidButton.current?.focus(); }} />}
-          {!firstAid && (character || agent || book || project) && (
+          {(agent || book || project) && (
             <div className="detail-card">
               <button
                 className="close"
@@ -557,16 +414,16 @@ export default function App() {
                 <X size={16} />
               </button>
               <span className="eyebrow">
-                {book ? "LEARNING BOOK" : project ? "PROJECT WALL" : character ? "CHARACTER STUDIO" : agent?.harness}
+                {book ? "LEARNING BOOK" : project ? "PROJECT WALL" : agent?.harness}
               </span>
-              <h2>{book?.title ?? project?.title ?? character?.name ?? agent?.name}</h2>
+              <h2>{book?.title ?? project?.title ?? (agent && agentDisplayName(agent))}</h2>
+              {agent && <p className="session-title">{agent.name}</p>}
               {book && <><p>{book.summary}</p>{book.sessionId && !guest && <small>Linked to {agents.find((item) => item.id === book.sessionId)?.name ?? "a session"}</small>}<span className="detail-tag"><BookOpen size={12} /> {openedBooks.length} of {visibleBooks.length} books explored</span></>}
               {project && <><p>A project pinned to this room.</p>{project.url && <a className="detail-link" href={project.url} target="_blank" rel="noreferrer">Open project <ArrowUpRight size={13} /></a>}</>}
               {!book && !project && <>
               {agent && (
                 <span className={`agent-behavior ${agent.status}`}>
                   {behavior(agent)}
-                  {replay ? " · recorded replay" : ""}
                 </span>
               )}
               {agent && linkedPartner(agent.id) && <small>Recent recorded session link with {linkedPartner(agent.id)!.name}. The play animation shows that link, not message contents.</small>}
@@ -578,21 +435,15 @@ export default function App() {
                 </small>
               )}
               <p>
-                {character?.description ??
-                  agent?.task ??
+                {agent?.task ??
                   "No current task reported."}
               </p>
-              {character ? (
-                <span className="detail-tag">
-                  <Sparkles size={12} /> Original 3D character · animated
-                </span>
-              ) : (
-                agent && (
+              {agent && (
                   <>
                     <dl>
                       <div>
                         <dt>Status</dt>
-                        <dd>{agent.status}</dd>
+                        <dd>{agent.status === "idle" ? "chilling" : agent.status}</dd>
                       </div>
                       <div>
                         <dt>Model</dt>
@@ -600,28 +451,16 @@ export default function App() {
                       </div>
                       {guest?.stats?.agentTotals?.[agent.id] && <><div><dt>Total tokens</dt><dd>{guest.stats.agentTotals[agent.id].totalTokens === null ? "Not reported" : guest.stats.agentTotals[agent.id].totalTokens!.toLocaleString()}</dd></div><div><dt>Spend</dt><dd>{guest.stats.agentTotals[agent.id].totalSpend === null ? "Not reported" : `USD ${guest.stats.agentTotals[agent.id].totalSpend!.toFixed(2)}`}</dd></div></>}
                     </dl>
-                    <AgentVitals agent={agent} />
                     <small>
                       Source event {new Date(agent.updatedAt).toLocaleString()}
                     </small>
-                    {agent.playback && <small className="context-note">{agent.playback.label}</small>}
-                    {agent.history && agent.history.length > 1 && (
-                      <button
-                        className="replay-button"
-                        onClick={() => startOfficeReplay()}
-                      >
-                        <Play size={13} />
-                        Replay all sessions together
-                      </button>
-                    )}
-                    {!guest && local.enabled && (
+                    {agent.status === 'offline' && <small>Disconnected {new Date(agent.disconnectedAt ?? agent.updatedAt).toLocaleString()} · hidden after 30 minutes</small>}
+                    {!guest && !live.roomId && local.enabled && (
                       <small className="context-note">
-                        Context is the last reported input size, not lifetime
-                        usage.
+                        Live status follows actual Codex events. Disconnected sources stay unconfirmed.
                       </small>
                     )}
                   </>
-                )
               )}
               </>}
             </div>
@@ -629,18 +468,12 @@ export default function App() {
           <div className="world-bottom">
             <span className="interaction-hint">
               <MousePointer2 size={13} />
-              Drag to explore. Click a little guy.
+              Drag to orbit · scroll to zoom · right-drag to pan
             </span>
             <div className="world-controls">
-              {!guest && <>
-                <button ref={firstAidButton} aria-label="Open first-aid station" title="First-aid station" onClick={openFirstAid}>
-                  <HeartPulse size={17} />
-                </button>
-                <span />
-              </>}
               <button
-                aria-label={replay && replayElapsed >= replay.durationMs ? (paused ? "Resume animation" : "Pause animation") : (paused ? "Resume office" : "Pause office")}
-                title={replay && replayElapsed >= replay.durationMs ? "Replay finished · control idle animation" : (paused ? "Resume office" : "Pause office")}
+                aria-label={paused ? "Resume office" : "Pause office"}
+                title={paused ? "Resume office" : "Pause office"}
                 onClick={() => setPaused(!paused)}
               >
                 {paused ? <Play size={17} /> : <Pause size={17} />}
@@ -660,7 +493,7 @@ export default function App() {
               >
                 {night ? <Sun size={17} /> : <Moon size={17} />}
               </button>
-              <button
+              {document.fullscreenEnabled && <button
                 aria-label="Toggle fullscreen"
                 title="Fullscreen"
                 onClick={() => {
@@ -674,7 +507,7 @@ export default function App() {
                 }}
               >
                 <Maximize size={17} />
-              </button>
+              </button>}
             </div>
             <span className="corner-note">
               Made of pixels. Full of personality.
@@ -685,29 +518,23 @@ export default function App() {
       <footer>
         <span>
           <span className="footer-dot" />
-          {guest ? `${guest.profile.displayName} · shared snapshot` : showPreview
-            ? "A playground for your future team"
-            : replay
-              ? "Recorded task replay · no task is being executed"
+          {guest ? `${guest.profile.displayName} · shared snapshot` : live.roomId
+              ? `${roomAgents.length} agents · live room ${live.state}`
               : local.enabled
-                ? `${agents.length} Codex sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
-                : `${agents.length} imported agents · snapshot mode`}
+                ? `${roomAgents.length} Codex sessions · ${local.state} · checked ${local.observedAt ? new Date(local.observedAt).toLocaleTimeString() : "—"}`
+                : `${roomAgents.length} imported agents · snapshot mode`}
         </span>
         <span>
           Powered by Three.js <span className="footer-separator">/</span> Built
           with a little <Heart size={11} />
         </span>
       </footer>
-      {!guest && studioTab && <RoomStudio key={studioTab} initialTab={studioTab} profile={profile} onProfile={setProfile} books={books} onBooks={setBooks} projects={projects} onProjects={setProjects} stats={stats} onStats={setStats} share={share} onShare={setShare} agents={visibleAgents} onClose={() => setStudioTab(null)} />}
-      {welcome && !guest && <Welcome existingCount={agents.length} onExplore={dismissWelcome} onSocialImport={() => { dismissWelcome(); setStudioTab("social"); }} onImport={(imported, importedLinks) => {
-        const merged = addAgents(imported, importedLinks);
+      {!guest && studioTab && <RoomStudio key={studioTab} initialTab={studioTab} profile={profile} onProfile={setProfile} books={books} onBooks={setBooks} projects={projects} onProjects={setProjects} stats={stats} onStats={setStats} share={share} onShare={setShare} agents={roomAgents} onClose={() => setStudioTab(null)} />}
+      {welcome && !guest && <Welcome live={live} existingCount={roomAgents.length} onExplore={dismissWelcome} onSocialImport={() => { dismissWelcome(); setStudioTab("social"); }} onImport={(imported, importedLinks) => {
+        addAgents(imported, importedLinks);
         setInteractionClock(Date.now());
         local.disconnect();
-        autoStartReplay.current = false;
-        setPreview(false);
         setPaused(false);
-        if (replay && !showProjectExample) setReplay(appendOfficeReplay(replay, imported, replayElapsed));
-        else startOfficeReplay(merged);
         dismissWelcome();
       }} />}
 

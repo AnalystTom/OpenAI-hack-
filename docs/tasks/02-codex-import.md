@@ -1,99 +1,18 @@
-# Workstream 2 — Bring a user's Codex agents into the hosted office
+# Bring Codex sessions into shared live rooms
 
-Owner: unclaimed — add your name here when you pick this up.
+The hosted import uses a consented local Node bridge and a Cloudflare Durable Object relay. One actual Codex source session maps to one stable participant-scoped agent. Source completion/interruption makes it idle, actual resumed work makes it working, stale source evidence stays unknown, and a lost bridge becomes offline after 20 seconds.
 
-## Goal
+The user enters an uploader name, creates or joins a 24 hour room, copies the prompt into Codex, selects an exact project and actual session IDs, then runs the inspectable bridge in a visible terminal. The bridge reads local metadata/event tails read-only, checks every three seconds, and sends changes over authenticated HTTPS. Unchanged sessions use a bodyless heartbeat about every twelve seconds. The site receives a full room snapshot on connection and participant changes over WebSockets. Public builds contain no local session reader, example agents, credentials, or recorded project data.
 
-A judge opens the publicly hosted Dots site, connects their own Codex sessions, and sees their actual agents represented in the office. Import must work for another user's machine/account, not only the developer's localhost.
+The room link grants viewing access. Write credentials are unique per participant, bind the entered uploader name, and never appear in invitations or broadcasts. Disconnect revokes only that participant. Rooms support 50 agents, 100 viewers, and delete stored data on expiry. Snapshot file import is a non-live fallback, explicitly labelled and unconfirmed for working status. Working agents stay at desks; idle agents sit in the expanded lounge. See [capacity and launch gates](../live-office-plan.md).
 
-## Starting point
+Implementation:
 
-The React + Vite frontend and Three.js office run with `npm install` then `npm run dev` at http://127.0.0.1:3000. `npm run build` produces a static `dist/` suitable for hosting; hosting and any bridge/backend are separate deployment concerns.
+- `server/live-room.mjs`: room isolation, upload validation, WebSocket subscriptions, lease/expiry alarms, revocation.
+- `scripts/codex-bridge.mjs`: real local reader, explicit project/session selection, authenticated recurring uploads.
+- `src/integrations/codex/useLiveRoom.ts`: room lifecycle, subscription/reconnect, browser member persistence.
+- `src/components/import/Welcome.tsx`: prompt, consent boundary, snapshot selection/error states.
+- `src/components/import/LiveRoomBar.tsx`: invite, join, disconnect and leave.
+- `wrangler.jsonc`: hosted relay and static assets; README documents local/deployment commands.
 
-The UI currently has:
-
-- A labelled character playground, containing art previews rather than fake agent activity.
-- An empty real-agent office.
-- An Import agents dialog with a working JSON snapshot file input, validation, and in-memory rendering.
-- An explicit unavailable/not-connected Codex account connection state.
-
-There is no Codex account integration, OAuth implementation, hosted relay, live stream, local reader, or message dispatch yet. Importing JSON is a snapshot, not a live connection. Do not present the existing dialog as completed account import.
-
-## Files you own
-
-- New transport, session reader, and connector modules under `src/integrations/codex/`.
-- New connection UI under `src/components/import/`.
-- Any required bridge/server code under `server/` or `scripts/` and a documented start command.
-- Connector-specific tests and deployment/environment documentation.
-- `src/snapshot.ts` if snapshot validation must evolve, coordinated with integration.
-
-The third workstream owns `src/App.tsx`, global styles, final wiring, and deployment coordination. The world teammate owns Three.js scene and avatars. Do not edit each other's files without agreeing first. Coordinate changes to `src/types.ts` and dependencies.
-
-## Shared data contract
-
-`src/types.ts` is authoritative. Emit `OfficeSnapshot` with `version: 1` and `agents: OfficeAgent[]`. One actual Codex chat/session maps to one persistent agent ID and one character.
-
-Each agent has:
-
-- `id`: stable source session/chat identifier.
-- `name`: real source title/name.
-- `harness`: actual harness identifier, such as Codex.
-- `model`: reported model identifier, or `null`.
-- `status`: `working`, `idle`, `blocked`, `error`, `offline`, or `unknown`.
-- `task`: actual reported current task, or `null`.
-- `contextUsed`, `contextWindow`: reported current context tokens and capacity, or `null`. Lifetime/cumulative tokens are not current context occupancy.
-- `updatedAt`: source observation/update time in ISO format.
-- Optional `character`: one of the six `CharacterKind` values.
-- Optional `sourceUrl`: a valid way to return to the source session, if supported.
-
-The app accepts up to 50 agents in a snapshot. Preserve session identity across refreshes and disconnections; deduplicate rather than creating a new character for every update. No sample people, tasks, percentages, or logs may appear as product data.
-
-## First decision: prove a real path from a hosted browser
-
-Investigate the supported Codex interfaces before promising account OAuth or remote session access. Do not assume a hosted website can read `~/.codex`, the Codex desktop app, or this chat's internal tools. Signing into an OpenAI account is not automatically access to local Codex sessions.
-
-The repository README specifies the intended journey: the user copies a prompt from the hosted site, sends it to Codex, and Codex uploads the selected session data to the hosted office. Implement that prompt-driven onboarding first, using pairing to scope where data lands. If no supported account/session API is available, the proposed path is:
-
-1. A short-lived pairing code created by the hosted site.
-2. The user explicitly runs a small local bridge or pastes an onboarding instruction into their own Codex environment.
-3. They choose the sessions/projects to share.
-4. The bridge reads permitted source metadata/events locally and sends a minimal authenticated feed to the hosted relay over an outbound connection.
-5. Their hosted office subscribes to only their paired feed.
-6. Disconnect revokes access and the UI marks stale/offline data honestly.
-
-Treat this as a proposed implementation, not an established Codex capability. Verify the source API or local format and deliver the smallest working route. Keep the real-file snapshot import as an explicitly labelled fallback if live pairing cannot be completed in the timebox.
-
-## Priorities
-
-1. Prove one real session from a separate/local client reaches the hosted frontend. Document the exact transport and supported source.
-2. Build a short onboarding journey: connect, choose sessions, confirm, see agents. Provide useful loading, permission, empty, error, expired pairing, and disconnected states.
-3. Subscribe to real activity changes and update existing characters. Distinguish a received task, actual running work, completion, and a lost connection.
-4. Keep the transport replaceable: provide a small subscription hook/service for the integration owner, plus connect/disconnect actions. Do not put connector details into the 3D renderer.
-5. Add source-return links where supported. Sending work to agents is a stretch goal; do not claim an instruction was sent without a real acknowledgement.
-
-## Privacy and hosting requirements
-
-- Never upload Codex credentials, API keys, auth files, full session archives, or unrelated conversations. Start with titles/status/model/context metadata and require explicit session selection.
-- Do not commit local session data or credentials. Environment secrets belong on the backend; browser bundles cannot keep secrets.
-- Authenticate the bridge and subscriptions, expire pairing codes, scope feeds per user/office, and test that a second account cannot read the first account's sessions.
-- Do not enable permissive unauthenticated filesystem access or a public endpoint that exposes the developer's sessions.
-- Use an HTTPS-compatible hosted path. A localhost-only reader is useful for development but does not meet the online-site requirement.
-- Declare stale/offline data when the bridge stops. Do not continue to animate fabricated working status.
-
-## Done means
-
-- From a fresh browser on the hosted site, a user can connect their own source, select real sessions, and see the correct titles, harnesses, statuses, and available model/context data.
-- A real source change arrives without a manual browser refresh or duplicate agent.
-- Empty accounts, missing permissions, invalid/expired pairing, bridge loss, reconnect, and disconnect behave correctly.
-- A second user cannot access the first user's feed.
-- Any snapshot fallback is clearly labelled as non-live; incomplete account integration is stated explicitly.
-- `npm run build` passes; tests cover source parsing and pairing/authorization boundaries. Verify the complete journey with Playwright from a fresh context and leave the verified page open.
-- Document deployment steps, required environment variable names (no values), and any unfinished acceptance criteria for the integration owner.
-
-Before any commit or push, run `/ponytail-review`, address its findings, and never bypass the repository's Ponytail hooks.
-
-## Local implementation now available
-
-The integration workstream added a local-only prototype after the initial handoff. `server/codex-sessions.mjs` reads the local Codex database read-only, scopes it to `~/Dev/Robots`, and returns six recent sessions plus minimal recorded status history. `src/integrations/codex/useRobotsSessions.ts` polls it every five seconds. It is mounted only by the development Vite plugin and protects loopback/origin/host boundaries. No session files are stored in the repository or public bundle.
-
-This does **not** complete the hosted pairing goal. Reuse the pure `parseSessionEvents` parser and `OfficeAgent`/`RecordedActivity` shapes where appropriate; implement the consented hosted transport separately. Optional `history` events contain only `at`, `status`, and a short event `label`. They power a clearly labelled replay, never claims of current work.
+Verification uses real source metadata in fresh Playwright browsers against the local frontend and Wrangler relay. Authorization tests cover cross-room tokens, field allowlisting, limits and revocation. Lifecycle tests cover participant identity, heartbeat loss/recovery, snapshots, persisted room state and expiry. Browser checks cover separate participants, mobile, clipboard, reload, bridge restart and disconnect. Production deployment and staging load tests remain launch gates.

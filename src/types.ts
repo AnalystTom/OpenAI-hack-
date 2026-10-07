@@ -23,6 +23,8 @@ export interface RunHealth {
 export interface OfficeAgent {
   id: string;
   name: string;
+  /** Name supplied by the uploader; not a verified account identity. */
+  ownerName?: string;
   harness: string;
   model: string | null;
   status: AgentStatus;
@@ -30,12 +32,12 @@ export interface OfficeAgent {
   contextUsed: number | null;
   contextWindow: number | null;
   updatedAt: string;
+  /** When the source connection was observed lost; separate from task activity. */
+  disconnectedAt?: string;
   character?: CharacterKind;
   sourceUrl?: string;
   history?: RecordedActivity[];
   activityLabel?: string | null;
-  /** Local playback controls, never source session telemetry. */
-  playback?: { state: "playing" | "finished"; label: string };
   health?: RunHealth;
   cost?: { estimatedUSD: number | null; observedRequests: number; unpricedRequests: number; assumedModelRequests: number };
 }

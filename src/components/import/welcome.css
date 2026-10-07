@@ -44,3 +44,14 @@
   .welcome-close { top: 18px; right: 18px; }
   .welcome-card h2 { font-size: 21px; }
 }
+.live-room-bar { background: #f3f6ec; border: 1px solid #dfe5d6; border-radius: 12px; padding: 14px; margin-bottom: 16px; color: #344030; }
+.live-room-bar b { font-size: 13px; }
+.live-room-bar p, .live-room-bar small { display: block; font-size: 11px; line-height: 1.5; color: #617355; margin: 6px 0; }
+.live-room-bar button { min-height: 44px; padding: 8px 12px; border: 1px solid #d8dfce; border-radius: 8px; background: #fffefa; color: #344030; font: inherit; font-size: 12px; cursor: pointer; }
+.live-room-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.live-room-bar input { width: 100%; min-width: 0; height: 40px; border: 1px solid #d8dfce; border-radius: 6px; background: #fffefa; font: inherit; font-size: 11px; padding: 8px; margin-top: 8px; }
+.live-room-bar [role="alert"] { color: #a33f32; }
+.welcome-card .welcome-action, .welcome-card .project-input { min-height: 44px; }
+.welcome-close { width: 44px; height: 44px; }
+.welcome-card .prompt-box summary { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+.welcome-card .prompt-box summary span { margin-left: auto; }

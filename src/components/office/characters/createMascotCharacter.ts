@@ -21,7 +21,7 @@ export interface MascotCharacter {
   /** Faces +Z, stands on y=0. Move, rotate, or scale this group freely. */
   group: THREE.Group;
   /** timeSeconds is elapsed time; walking is a 0–1 gait intensity. */
-  update: (timeSeconds: number, walking?: number, sitting?: boolean) => void;
+  update: (timeSeconds: number, walking?: number, sitting?: boolean, resting?: boolean) => void;
   dispose: () => void;
 }
 
@@ -318,7 +318,7 @@ export function createMascotCharacter(kind: MascotKind): MascotCharacter {
 
   return {
     group,
-    update(timeSeconds, walking = 0, sitting = false) {
+    update(timeSeconds, walking = 0, sitting = false, resting = false) {
       const amount = THREE.MathUtils.clamp(walking, 0, 1);
       const step = timeSeconds * 8.5;
       const stride = Math.sin(step) * amount;
@@ -337,8 +337,8 @@ export function createMascotCharacter(kind: MascotKind): MascotCharacter {
         body.rotation.x = 0.1 + Math.sin(timeSeconds * 2) * 0.018;
         legs[0].rotation.x = -1.35;
         legs[1].rotation.x = -1.35;
-        arms[0].rotation.x = -1.15 + Math.sin(timeSeconds * 14) * 0.08;
-        arms[1].rotation.x = -1.15 + Math.cos(timeSeconds * 14) * 0.08;
+        arms[0].rotation.x = resting ? -0.25 : -1.15 + Math.sin(timeSeconds * 14) * 0.08;
+        arms[1].rotation.x = resting ? -0.25 : -1.15 + Math.cos(timeSeconds * 14) * 0.08;
       }
     },
     dispose() {

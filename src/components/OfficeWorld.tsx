@@ -3,11 +3,16 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Billboard,
   ContactShadows,
-  Html,
   OrbitControls,
   RoundedBox,
 } from "@react-three/drei";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { Eye, Grid2X2, Hand, Minus, Plus } from "lucide-react";
+import { roomCameraFrame, type RoomView } from "./office/camera";
+import "./office/camera.css";
+import { AgentNameplate } from "./office/AgentNameplate";
+import { SHOWCASE_CHARACTERS, showcasePose, showcaseState, type ShowcaseState } from "../showcase";
 import { InstancedFurnitureItems } from "../features/retro-office/objects/furniture";
 import type { FurnitureItem } from "../features/retro-office/core/types";
 import {
@@ -15,7 +20,7 @@ import {
   type MascotCharacter,
 } from "./office/characters/createMascotCharacter";
 import type { AgentStatus, CharacterKind, OfficeAgent } from "../types";
-import { agentActivityLabel } from "../officeReplay";
+import { agentDisplayName } from "../officeActivity";
 import Tibo from "./office/Tibo";
 import ToyHammer from "./office/ToyHammer";
 import AgentFirework, { FIREWORK_DURATION } from "./office/AgentFirework";
@@ -66,8 +71,9 @@ export const CHARACTERS: {
 ];
 import {
   officeLayout,
+  loungeLayout,
   CHAIR_PLACEMENT,
-  STATUS_LABELS,
+  SHOWCASE_DESKS,
   agentCharacter,
   officePose,
   type LiveInteraction,
@@ -144,7 +150,7 @@ function Furniture({ total }: { total: number }) {
         y: (z + 16.2) / 0.018,
         facing,
       });
-    for (const { x, z } of officeLayout(total).desks) {
+    for (const { x, z } of [...officeLayout(total).desks, ...SHOWCASE_DESKS]) {
       add("desk_cubicle", x, z);
       add("computer", x + 0.55, z - 0.25);
       add(
@@ -154,9 +160,6 @@ function Furniture({ total }: { total: number }) {
         CHAIR_PLACEMENT.facing,
       );
     }
-    add("couch", 6, -3, 270);
-    add("round_table", 6.2, 0.6);
-    add("couch_v", 6.8, 3.1);
     add("bookshelf", -7.5, -5.4);
     add("bookshelf", -5.2, -5.4);
     add("coffee_machine", 3.6, -5.2);
@@ -206,22 +209,15 @@ function Box({
     </RoundedBox>
   );
 }
-function FirstAidKit({ onOpen }: { onOpen: () => void }) {
-  return <group position={[-10.05, .4, -3.5]} rotation={[0, Math.PI / 2, 0]} onClick={(e) => { e.stopPropagation(); onOpen(); }}
-    onPointerOver={() => { document.body.style.cursor = "pointer"; }}
-    onPointerOut={() => { document.body.style.cursor = "auto"; }}>
-    <Box position={[0, 1.05, 0]} size={[1.6, .9, .65]} color="#52765a" />
-    <Box position={[0, 1.58, 0]} size={[.65, .13, .18]} color="#3c5540" />
-    <Box position={[-.29, 1.48, 0]} size={[.1, .25, .18]} color="#3c5540" />
-    <Box position={[.29, 1.48, 0]} size={[.1, .25, .18]} color="#3c5540" />
-    <Box position={[0, 1.05, .34]} size={[.18, .55, .04]} color="#f5f3e7" />
-    <Box position={[0, 1.05, .37]} size={[.55, .18, .04]} color="#f5f3e7" />
-    <Billboard position={[0, 2, 0]}><Label text="FIRST AID" position={[0, 0, 0]} width={1.9} height={.4} /></Billboard>
-  </group>;
-}
 function Room({ night, profile, total }: { night: boolean; profile: RoomProfile; total: number }) {
   const layout = officeLayout(total);
   const palette = PALETTES[profile.theme];
+  const backWall = useRef<THREE.Group>(null);
+  const leftWall = useRef<THREE.Group>(null);
+  useFrame(({ camera }) => {
+    if (backWall.current) backWall.current.visible = camera.position.z >= -7.9;
+    if (leftWall.current) leftWall.current.visible = camera.position.x >= layout.x - layout.width / 2 + 0.1;
+  });
   return (
     <>
       <Box
@@ -244,25 +240,15 @@ function Room({ night, profile, total }: { night: boolean; profile: RoomProfile;
           <meshStandardMaterial color={night ? "#667369" : palette.wall} />
         </mesh>
       ))}
-      <Box
-        position={[layout.x, 1.35, -7.9]}
-        size={[layout.width, 2.7, 0.22]}
-        color={night ? "#4c5954" : palette.wall}
-      />
-      <Box
+      <group ref={leftWall} name="Left cutaway wall"><Box
         position={[layout.x - layout.width / 2 + 0.1, 1.35, layout.z]}
         size={[0.22, 2.7, layout.depth]}
         color={night ? "#44504c" : palette.wall}
-      />
-      <Box
-        position={[layout.carpet.x, 0.07, layout.carpet.z]}
-        size={[layout.carpet.width, 0.05, layout.carpet.depth]}
-        color={night ? "#547366" : palette.rug}
-      />
-      <Box
-        position={[7.6, 0.075, 0.5]}
-        size={[4.8, 0.06, 8.3]}
-        color={night ? "#806955" : palette.lounge}
+      /></group>
+      <group ref={backWall} name="Back cutaway wall"><Box
+        position={[layout.x, 1.35, -7.9]}
+        size={[layout.width, 2.7, 0.22]}
+        color={night ? "#4c5954" : palette.wall}
       />
       {[-7, -2, 3].map((x) => (
         <group key={x} position={[x, 1.7, -7.74]}>
@@ -288,6 +274,22 @@ function Room({ night, profile, total }: { night: boolean; profile: RoomProfile;
         color="#f9f9f2"
         fontSize={55}
       />
+      {profile.theme === "cosmic" && Array.from({ length: 12 }, (_, index) => <mesh key={index} position={[-8.7 + (index % 6) * 3.2, 1.8 + (index % 2) * 0.38, -7.72]}><sphereGeometry args={[0.055, 8, 8]} /><meshBasicMaterial color="#fcf5c9" /></mesh>)}
+      </group>
+      <Box
+        position={[layout.carpet.x, 0.07, layout.carpet.z]}
+        size={[layout.carpet.width, 0.05, layout.carpet.depth]}
+        color={night ? "#547366" : palette.rug}
+      />
+      <Box position={[11.2, 0.075, layout.z]} size={[14.4, 0.06, layout.depth - 1]} color={night ? "#806955" : palette.lounge} />
+      <group name="Chilling lounge">
+        {loungeLayout(total).sofas.map(({ x, z }, index) => <group key={index} name={`Lounge sofa ${index + 1}`} position={[x, 0, z]}>
+          <Box position={[0, 0.34, 0]} size={[4.2, 0.6, 1.8]} color={night ? "#766c83" : palette.accent} />
+          <Box position={[0, 1.2, -0.72]} size={[4.2, 1.2, 0.38]} color={night ? "#766c83" : palette.accent} />
+          {[-1.96, 1.96].map(side => <Box key={side} position={[side, 0.8, 0]} size={[0.3, 0.65, 1.8]} color={palette.accent} />)}
+          {[-1, 1].map(side => <Box key={side} position={[side, 0.67, 0.12]} size={[1.75, 0.22, 1.35]} color={night ? "#978995" : palette.lounge} />)}
+        </group>)}
+      </group>
       <Label
         text="MAKE ROOM FOR IDEAS"
         rotation={[-Math.PI / 2, 0, 0]}
@@ -304,9 +306,8 @@ function Room({ night, profile, total }: { night: boolean; profile: RoomProfile;
         height={0.35}
         bg={palette.lounge}
       />
-      {profile.theme === "cosmic" && Array.from({ length: 12 }, (_, index) => <mesh key={index} position={[-8.7 + (index % 6) * 3.2, 1.8 + (index % 2) * 0.38, -7.72]}><sphereGeometry args={[0.055, 8, 8]} /><meshBasicMaterial color="#fcf5c9" /></mesh>)}
       <Label text="WORK STATIONS" rotation={[-Math.PI / 2, 0, 0]} position={[-2.5, 0.12, -1.75]} width={3.1} height={0.42} bg={night ? "#547366" : palette.rug} color="#f7f8ef" />
-      <Label text="COFFEE BREAK" rotation={[-Math.PI / 2, 0, 0]} position={[5.7, 0.12, -1.7]} width={2.7} height={0.42} bg={night ? "#806955" : palette.lounge} color="#fffaf0" />
+      <Label text="CHILLING LOUNGE" rotation={[-Math.PI / 2, 0, 0]} position={[11.2, 0.12, 5.6]} width={4.1} height={0.5} bg={night ? "#806955" : palette.lounge} color="#fffaf0" />
       <Furniture total={total} />
     </>
   );
@@ -316,7 +317,7 @@ function KnowledgeDisplay({ books, selected, onSelect, accent }: {
 }) {
   if (!books.length) return null;
   const covers = ["#e8a36f", "#78afad", "#ad91c6", "#d1b46f", "#91b98b", "#d8899a", "#7c9ac1", "#d5a881"];
-  return <group position={[5.5, 0, 1.5]}>
+  return <group position={[15.5, 0, 5.5]}>
     <RoundedBox args={[3.2, 0.24, 2.2]} radius={0.08} smoothness={2} position={[0, 0.2, 0]} castShadow receiveShadow><meshStandardMaterial color="#e5d8be" roughness={0.8} /></RoundedBox>
     <Label text="THE LEARNING LIBRARY" position={[0, 0.32, 1.13]} width={2.3} height={0.28} bg={accent} color="#fffdf4" fontSize={68} />
     {books.slice(0, 8).map((book, index) => {
@@ -346,25 +347,6 @@ function ProjectWall({ projects, selected, onSelect, accent }: {
     <mesh><boxGeometry args={[1.75, 0.86, 0.09]} /><meshStandardMaterial color={selected === project.id ? "#f0c55d" : accent} /></mesh>
     <Label text={project.title.slice(0, 30)} position={[0, 0, 0.052]} width={1.6} height={0.48} bg="#fbfaf1" color="#334335" fontSize={67} />
   </group>)}</group>;
-}
-function InvitePortal({ onInvite, accent }: { onInvite?: () => void; accent: string }) {
-  if (!onInvite) return null;
-  return <group position={[8.7, 0.1, 5.7]}
-    onClick={(event) => { event.stopPropagation(); onInvite(); }}
-    onPointerOver={() => { document.body.style.cursor = "pointer"; }}
-    onPointerOut={() => { document.body.style.cursor = "auto"; }}>
-    <mesh position={[0, 1.06, 0]}><torusGeometry args={[0.67, 0.13, 12, 48]} /><meshStandardMaterial color={accent} metalness={0.2} roughness={0.35} emissive={accent} emissiveIntensity={0.18} /></mesh>
-    <mesh position={[0, 1.06, -0.05]}><circleGeometry args={[0.61, 48]} /><meshBasicMaterial color={accent} transparent opacity={0.25} side={THREE.DoubleSide} /></mesh>
-    <Label text="INVITE FRIENDS" position={[0, 2.04, 0]} width={1.75} height={0.32} bg={accent} color="#fffdf4" fontSize={72} />
-  </group>;
-}
-function ContextMeter({ agent }: { agent: OfficeAgent }) {
-  const known = agent.contextUsed !== null && agent.contextWindow !== null;
-  const fraction = known ? THREE.MathUtils.clamp(agent.contextUsed! / agent.contextWindow!, 0, 1) : 0;
-  return <group position={[0.87, 0, 0.25]}>
-    <RoundedBox args={[0.23, 0.92, 0.12]} radius={0.06} smoothness={2} position={[0, 1.02, 0]}><meshStandardMaterial color="#e7e9e2" /></RoundedBox>
-    {known ? <RoundedBox args={[0.13, Math.max(0.005, fraction * 0.75), 0.14]} radius={0.03} smoothness={2} position={[0, 0.63 + fraction * 0.375, 0.015]}><meshStandardMaterial color={fraction > 0.85 ? "#e79d57" : "#7cbd86"} /></RoundedBox> : <Label text="?" position={[0, 1.02, 0.08]} width={0.16} height={0.25} bg="#e7e9e2" color="#6d7a73" fontSize={90} />}
-  </group>;
 }
 function TeamUp({ slot, accent, paused, reducedMotion }: { slot: number; accent: string; paused: boolean; reducedMotion: boolean }) {
   const orb = useRef<THREE.Group>(null);
@@ -405,9 +387,7 @@ function Walker({
   paused,
   selected,
   onSelect,
-  label,
   status,
-  statusText,
   fireworkStartedAt,
   hammerHeld,
   hitAt,
@@ -417,6 +397,7 @@ function Walker({
   agent,
   reducedMotion,
   interaction,
+  showcase,
 }: {
   id: string;
   kind: CharacterKind;
@@ -425,9 +406,7 @@ function Walker({
   paused: boolean;
   selected: boolean;
   onSelect: () => void;
-  label?: string;
   status: AgentStatus | "preview";
-  statusText?: string;
   fireworkStartedAt: number | null;
   hammerHeld: boolean;
   hitAt?: number;
@@ -435,13 +414,14 @@ function Walker({
   retrying?: boolean;
   animationTime: { current: number };
   agent?: OfficeAgent;
+  showcase?: { index: number; state: ShowcaseState; onActivity: (index: number, state: ShowcaseState) => void };
   reducedMotion: boolean;
   interaction?: { slot: number; side: "from" | "to" };
 }) {
   const mascot = useRef<MascotCharacter | null>(null);
   const parent = useRef<THREE.Group>(null);
   const visual = useRef<THREE.Group>(null);
-  const initialPose = useRef(officePose(status, index, animationTime.current, total));
+  const initialPose = useRef(showcase ? showcasePose(showcase.index, 0, total) : officePose(status, index, animationTime.current, total));
   useEffect(() => {
     const instance = createMascotCharacter(kind);
     mascot.current = instance;
@@ -453,7 +433,12 @@ function Walker({
     };
   }, [kind]);
   useFrame((_, dt) => {
-    const pose = officePose(hitAt === undefined ? status : "working", index, reducedMotion ? 0 : animationTime.current, total, hitAt === undefined && retrying, hitAt === undefined ? interaction : undefined);
+    const elapsed = reducedMotion ? 0 : animationTime.current;
+    const pose = showcase ? showcasePose(showcase.index, elapsed, total) : officePose(status, index, elapsed, total, retrying, interaction);
+    if (showcase) {
+      const state = showcaseState(elapsed, showcase.index);
+      if (state.phase !== showcase.state.phase) showcase.onActivity(showcase.index, state);
+    }
     if (visual.current) {
       const impact = hitAt === undefined || reducedMotion ? 0 : Math.max(0, 1 - (performance.now() - hitAt) / 400);
       visual.current.scale.set(1 + impact * 0.18, 1 - impact * 0.2, 1 + impact * 0.18);
@@ -469,13 +454,14 @@ function Walker({
         reducedMotion ? 0 : animationTime.current,
         paused || reducedMotion ? 0 : pose.walking || moving ? 1 : 0,
         pose.sitting && (!moving || reducedMotion),
+        status === "idle" || status === "offline",
       );
     }
   });
   return (
     <group
       ref={parent}
-      name={`office-agent:${id}`}
+      name={`${showcase ? "office-showcase" : "office-agent"}:${id}`}
       position={[
         initialPose.current.x,
         initialPose.current.y,
@@ -509,45 +495,31 @@ function Walker({
           <meshBasicMaterial color="#f2b94a" side={THREE.DoubleSide} />
         </mesh>
       )}
-      {agent ? <Billboard>
-        <ContextMeter agent={agent} />
-        <Label text={agent.name.length > 26 ? `${agent.name.slice(0, 23)}…` : agent.name} subtitle={statusText ?? STATUS_LABELS[agent.status]} position={[0, 2.85, 0]} width={3.1} height={0.88} bg={STATUS_COLOR[agent.status]} color="#233026" />
-      </Billboard> : label && (
-        <Billboard position={[0, 2.35, 0]}>
-          <Label
-            text={label.length > 24 ? label.slice(0, 24) + "…" : label}
-            subtitle={hitAt === undefined ? statusText ?? STATUS_LABELS[status] : "At desk · hammer play"}
-            bg={status === "working" ? "#e7f3d8" : "#fcfcf5"}
-            color="#283b23"
-            position={[0, 0, 0]}
-            width={4.2}
-            height={1.15}
-          />
-        </Billboard>
-      )}
+      {agent ? <AgentNameplate name={agentDisplayName(agent)} color={STATUS_COLOR[agent.status]} selected={selected} />
+        : showcase && <AgentNameplate name={SHOWCASE_CHARACTERS[showcase.index].name} color="#8b9b70" selected={selected} />}
     </group>
   );
 }
-function CameraReset({ resetKey, total }: { resetKey: number; total: number }) {
-  const { camera, controls, invalidate } = useThree();
+function CameraReset({ resetKey, total, view }: { resetKey: number; total: number; view: RoomView | null }) {
+  const { camera, controls, invalidate, size } = useThree();
   useEffect(() => {
-    const layout = officeLayout(total);
-    const zoom = Math.max(layout.width / 21, layout.depth / 16);
-    camera.position.set(layout.x + 18 * zoom, 17 * zoom, layout.z + 20 * zoom);
-    const orbit = controls as unknown as {
-      target: THREE.Vector3;
-      update: () => void;
-    } | null;
-    orbit?.target.set(layout.x, 0.2, layout.z);
+    if (!view || !(camera instanceof THREE.PerspectiveCamera)) return;
+    const frame = roomCameraFrame(total, size.width / size.height, camera.fov, view);
+    const orbit = controls as OrbitControlsImpl | null;
+    // Clear pending drag damping before applying a preset.
+    if (orbit) { orbit.enableDamping = false; orbit.update(); }
+    camera.position.copy(frame.position);
+    orbit?.target.copy(frame.target);
+    camera.lookAt(frame.target);
     orbit?.update();
+    if (orbit) orbit.enableDamping = true;
     invalidate();
-  }, [resetKey, total, camera, controls, invalidate]);
+  }, [resetKey, total, view, camera, controls, invalidate, size.width, size.height]);
   return null;
 }
 export default function OfficeWorld({
   agents,
   interactions,
-  preview,
   paused,
   night,
   cameraKey,
@@ -560,13 +532,12 @@ export default function OfficeWorld({
   selectedProject,
   onSelectBook,
   onSelectProject,
-  onInvite,
   onReady,
-  onFirstAid,
+  showcaseActivities,
+  onShowcaseActivity,
 }: {
   agents: OfficeAgent[];
   interactions: LiveInteraction[];
-  preview: boolean;
   paused: boolean;
   night: boolean;
   cameraKey: number;
@@ -579,13 +550,22 @@ export default function OfficeWorld({
   selectedProject: string | null;
   onSelectBook: (id: string) => void;
   onSelectProject: (id: string) => void;
-  onInvite?: () => void;
   onReady: () => void;
-  onFirstAid?: () => void;
+  showcaseActivities: ShowcaseState[];
+  onShowcaseActivity: (index: number, state: ShowcaseState) => void;
 }) {
   const [fireworkStartedAt, setFireworkStartedAt] = useState<number | null>(null);
   const animationTime = useRef(0);
   const [hammerHeld, setHammerHeld] = useState(false);
+  const [orbit, setOrbit] = useState<OrbitControlsImpl | null>(null);
+  const [view, setView] = useState<RoomView | null>("overview");
+  const [viewKey, setViewKey] = useState(0);
+  const [panMode, setPanMode] = useState(false);
+  useEffect(() => { setView("overview"); }, [cameraKey]);
+  function chooseView(next: RoomView) {
+    setView(next);
+    setViewKey((key) => key + 1);
+  }
   const [swingAt, setSwingAt] = useState(0);
   const [hammerHits, setHammerHits] = useState<Record<string, number>>({});
   const [lastHit, setLastHit] = useState<string | null>(null);
@@ -597,7 +577,7 @@ export default function OfficeWorld({
     setHammerHits((hits) => ({ ...hits, [id]: at }));
     setLastHit(name);
   }
-  const hasAgents = preview || agents.length > 0;
+  const hasAgents = agents.length > 0;
   useEffect(() => {
     if (fireworkStartedAt === null) return;
     const timer = setTimeout(() => setFireworkStartedAt(null), FIREWORK_DURATION * 1000);
@@ -644,11 +624,9 @@ export default function OfficeWorld({
       />
       <Suspense fallback={null}>
         <Room night={night} profile={profile} total={agents.length} />
-        {onFirstAid && <FirstAidKit onOpen={onFirstAid} />}
       </Suspense>
       <KnowledgeDisplay books={books} selected={selectedBook} onSelect={onSelectBook} accent={palette.accent} />
       <ProjectWall projects={projects} selected={selectedProject} onSelect={onSelectProject} accent={palette.accent} />
-      <group position={[-15, 0, 0]}><InvitePortal onInvite={onInvite} accent={palette.accent} /></group>
       {interactions.map((link) => <TeamUp key={`${link.fromId}-${link.toId}`} slot={link.slot} accent={palette.accent} paused={paused} reducedMotion={reducedMotion} />)}
       <Tibo celebrating={fireworkStartedAt !== null} />
       <ToyHammer held={hammerHeld} swingAt={swingAt} reducedMotion={reducedMotion} onPickUp={() => { document.body.style.cursor = "auto"; onSelect(""); setHammerHeld(true); }} onDrop={dropHammer} onSwing={swingHammer} />
@@ -670,35 +648,23 @@ export default function OfficeWorld({
             <meshStandardMaterial color={hasAgents ? "#e6533d" : "#848b80"} roughness={0.3} emissive="#e6533d" emissiveIntensity={fireworkStartedAt === null ? 0 : 0.45} />
           </mesh>
           <Label text="RESET" position={[0, 0.155, 0]} rotation={[-Math.PI / 2, 0, 0]} width={0.85} height={0.3} bg={hasAgents ? "#e6533d" : "#848b80"} color="#fff7eb" fontSize={150} />
-          <Html position={[0, 0.18, 0]} center zIndexRange={[10, 0]}>
-            <button className="world-reset-hit" aria-label="Reset agents with fireworks" disabled={!hasAgents}
-              onPointerDown={(event) => event.stopPropagation()} onClick={resetWithFireworks} />
-          </Html>
         </group>
         <Billboard position={[-1.15, 4.35, 0]}>
           <Label text="TIBO" subtitle="Hit reset. Make sparks." position={[0, 0, 0]} width={3.7} height={0.9} bg="#fff6e7" color="#524b3c" />
         </Billboard>
       </group>
-      {[...(preview ? CHARACTERS.map((c) => ({
-            id: c.kind,
-            kind: c.kind,
-            label: undefined,
-            status: "preview" as const,
-          })) : []),
-        ...(!preview ? agents.map((a) => ({
+      {agents.map((a) => ({
             id: a.id,
             kind: a.character ?? agentCharacter(a.id),
             label: a.name,
             status: a.status,
-            statusText: agentActivityLabel(a),
             retrying: a.health?.retrying,
             agent: a,
             interaction: (() => {
               const link = interactions.find((item) => item.fromId === a.id || item.toId === a.id);
               return link ? { slot: link.slot, side: link.fromId === a.id ? "from" as const : "to" as const } : undefined;
             })(),
-          })) : [])
-      ].map((a, i, array) => (
+          })).map((a, i, array) => (
         <Walker
           key={a.id}
           {...a}
@@ -715,6 +681,14 @@ export default function OfficeWorld({
           onSelect={() => onSelect(a.id)}
         />
       ))}
+      {SHOWCASE_CHARACTERS.map((character, index) => <Walker
+        key={character.id} id={character.id} kind={character.kind} index={50 + index} total={agents.length}
+        status={showcaseActivities[index].status} animationTime={animationTime} paused={paused} reducedMotion={reducedMotion}
+        selected={selected === character.id} onSelect={() => onSelect(character.id)}
+        fireworkStartedAt={fireworkStartedAt} hammerHeld={hammerHeld} hitAt={hammerHits[character.id]}
+        onHit={() => hitAgent(character.id, character.name)}
+        showcase={{ index, state: showcaseActivities[index], onActivity: onShowcaseActivity }}
+      />)}
       <ContactShadows
         position={[0, -0.66, 0]}
         opacity={0.3}
@@ -724,21 +698,42 @@ export default function OfficeWorld({
         resolution={512}
         frames={1}
       />
-      <CameraReset resetKey={cameraKey} total={agents.length} />
+      <CameraReset resetKey={cameraKey + viewKey} total={agents.length} view={view} />
       <OrbitControls
+        ref={setOrbit}
         makeDefault
         enabled={!hammerHeld}
         target={[0, 0.2, 0]}
-        minDistance={13}
-        maxDistance={160}
+        minDistance={6}
+        maxDistance={600}
         maxPolarAngle={Math.PI / 2.25}
-        minPolarAngle={0.2}
+        minPolarAngle={0.001}
+        zoomToCursor
+        screenSpacePanning={false}
+        mouseButtons={{ LEFT: panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
+        touches={{ ONE: panMode ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+        onStart={() => setView(null)}
         enableDamping
       />
     </Canvas>
+    <div className="room-toys">
+      <button className="world-reset-hit" aria-label="Reset agents with fireworks" disabled={!hasAgents} onClick={resetWithFireworks}>Fireworks</button>
+      <button className="hammer-pickup" aria-label={hammerHeld ? 'Put down toy hammer' : 'Pick up toy hammer'} onClick={() => {
+        if (hammerHeld) dropHammer();
+        else { document.body.style.cursor = 'auto'; onSelect(''); setHammerHeld(true); }
+      }}>{hammerHeld ? 'Put down hammer' : 'Toy hammer'}</button>
+    </div>
+    <div className="room-camera" role="toolbar" aria-label="Room camera">
+      <button aria-label="Room overview" title="Fit the whole room" aria-pressed={view === "overview"} disabled={hammerHeld} onClick={() => chooseView("overview")}><Eye size={16} /><span>Overview</span></button>
+      <button aria-label="Top view" title="See the floor plan from above" aria-pressed={view === "overhead"} disabled={hammerHeld} onClick={() => chooseView("overhead")}><Grid2X2 size={16} /><span>Top view</span></button>
+      <span />
+      <button aria-label="Zoom in" title="Zoom in" disabled={hammerHeld} onClick={() => orbit?.dollyIn(0.8)}><Plus size={16} /></button>
+      <button aria-label="Zoom out" title="Zoom out" disabled={hammerHeld} onClick={() => orbit?.dollyOut(0.8)}><Minus size={16} /></button>
+      <button aria-label="Pan camera" title="Drag to move around the room" aria-pressed={panMode} disabled={hammerHeld} onClick={() => setPanMode((active) => !active)}><Hand size={16} /><span>Pan</span></button>
+    </div>
     <div className="hammer-hint" role="status" aria-live="polite">
       {hammerHeld ? "Hammer in hand · click near a coworker · Esc or right-click to put down" : "Pick up the toy hammer in the office"}
-      <small>{lastHit ? `${lastHit} is heading back to their desk.` : "Toy interaction · character movement only"}</small>
+      <small>{lastHit ? `${lastHit} got a playful tap.` : "Toy interaction · source status stays intact"}</small>
     </div>
     <div className="tibo-reset-hint" role="status" aria-live="polite">
       {fireworkStartedAt !== null ? "Fireworks above your agents!" : hasAgents ? "Hit Tibo’s red 3D button for fireworks above your agents." : "Import agents to try Tibo’s firework reset."}

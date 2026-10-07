@@ -1,11 +1,4 @@
-export interface ImportPairing {
-  id: string;
-  readToken: string;
-  uploadToken: string;
-  expiresAt: number;
-}
-
-export function importPrompt(project: string, upload?: { url: string; token: string }) {
+export function importPrompt(project: string) {
   return `Bring my recent Codex sessions into my Dots office as a recorded snapshot.
 
 Scope: ${project.trim() ? `Only the project I specify here: ${JSON.stringify(project.trim())}. Resolve its exact project directory before reading sessions.` : "Ask me which project to include before reading sessions."} Read up to 50 recent non-archived sessions from that project, read-only. Do not run or restart any tasks.
@@ -22,7 +15,18 @@ Create a JSON object with version: 1 and agents: an array. Each agent must conta
 
 Do not export messages, reasoning, tool arguments/output, file contents, absolute file paths, secrets or full archives. Do not invent sessions, stages, metrics or timestamps. If there are no sessions, return an empty agents array. Keep the JSON under 2 MB.
 
-${upload ? `Upload only this minimal JSON via HTTP PUT to ${upload.url}
-Headers: Content-Type: application/json and Authorization: Bearer ${upload.token}
-This temporary upload is for my open local Dots tab. Do not put the token in a URL or commit it. Check the HTTP response; report success only if it returns 200 with an accepted count. If expired or unavailable, save dots-snapshot.json outside the repository and tell me to use Import snapshot file.` : "Save the JSON as dots-snapshot.json outside the repository. Tell me where it is so I can select it using Import snapshot file on Dots. This website does not have automatic upload configured."}`;
+Save the JSON as dots-snapshot.json outside the repository. Tell me where it is so I can select it using Import snapshot file on Dots. This is a recorded snapshot; live activity uses the separate room bridge.`;
+}
+
+export function liveImportPrompt(project: string, feed: { url: string; token: string; bridgeUrl: string }) {
+  return `Connect my selected local Codex sessions to this shared Dots room and stream their real activity.
+
+${project.trim() ? `Use the project I entered: ${JSON.stringify(project.trim())}. Resolve its exact directory first.` : 'Ask me which exact project directory to share before reading any sessions.'}
+Download the Node.js bridge from ${feed.bridgeUrl} to a temporary directory outside my repository. Inspect the code before running it. It requires Node.js 22.13 or newer and reads the local Codex state_5.sqlite index read-only plus bounded session event tails.
+First run the bridge with --project set to that directory and --list. Show me the actual session IDs, titles, models and statuses, and ask which IDs to share. Do not upload until I choose.
+Then run that same bridge in a terminal I can keep open with --project, --sessions set to a comma-separated list of ONLY my chosen IDs, and --url ${feed.url}.
+Set DOTS_ROOM_UPLOAD_TOKEN in that process environment to ${feed.token}. Do not put this credential in a URL, commit it, or print it in logs.
+The bridge checks local status every three seconds, sends changed metadata over authenticated HTTPS, and renews an unchanged connection about every twelve seconds: selected session IDs/titles, model, real status, activity label, available context counts and observed timestamps. Everyone with the room invitation sees this selected metadata. No messages, reasoning, tool arguments/output, file contents, absolute paths, credentials or full archives are uploaded.
+Keep the bridge running while I work. Do not run, restart or modify my Codex tasks. Real completion/interruption makes the bot chill on a sofa; a new task sends it back to its desk. The uploader name is the one I entered in Dots, not the session title. The activity label follows actual tool events, not an invented percentage. Lost bridge heartbeats become disconnected. Ctrl+C stops sharing; Disconnect my agents in Dots revokes this credential.
+Verify the upload response reports an accepted count. If the source or upload fails, report the actual error. Never invent sessions, statuses, metrics or success. This room and credential expire after 24 hours.`;
 }

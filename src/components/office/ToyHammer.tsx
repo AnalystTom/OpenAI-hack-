@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { Html, RoundedBox } from "@react-three/drei";
+import { RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 
 export default function ToyHammer({ held, swingAt, onPickUp, onDrop, onSwing, reducedMotion }: {
@@ -63,9 +63,5 @@ export default function ToyHammer({ held, swingAt, onPickUp, onDrop, onSwing, re
     <RoundedBox args={[0.33, 0.5, 0.33]} radius={0.09} position={[0, -1.22, 0]} castShadow raycast={raycast}>
       <meshStandardMaterial color="#5abbb4" roughness={0.8} />
     </RoundedBox>
-    {!held && <Html position={[0, 0, 0]} center zIndexRange={[8, 0]}>
-      <button className="hammer-pickup" aria-label="Pick up toy hammer" title="Pick up toy hammer"
-        onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onPickUp(); }} />
-    </Html>}
   </group>;
 }

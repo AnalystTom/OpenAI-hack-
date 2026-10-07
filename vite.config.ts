@@ -2,9 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 import { localCodexPlugin } from "./server/codex-sessions.mjs";
-import { officeImportPlugin } from "./server/office-import.mjs";
-import { codexDoctorPlugin } from "./server/codex-doctor.mjs";
 export default defineConfig({
-  plugins: [react(), localCodexPlugin(), officeImportPlugin(), codexDoctorPlugin()],
+  plugins: [react(), localCodexPlugin()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  server: { proxy: { '/api/live': { target: 'http://127.0.0.1:8787', ws: true } } },
 });

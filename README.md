@@ -1,57 +1,51 @@
-# OpenAI-hack-
+# Dots office
 
+A small 3D office for actual Codex sessions. Working agents sit at desks; completed or interrupted agents chill on sofas in the expanded lounge. New source work returns the same agent to its desk. Two clearly labelled animated showcase characters keep the room active by arriving, working, changing tasks, wandering, and leaving. They are separate from actual sessions and their counts.
 
-Someone does teh 3 model and the world (openai dots as example, lovable heart) 
+## Run locally
 
-
-Someone does the import mechanis of being able to import user's account (codex sessions so that they can visualise their agents as well whiel teh site is hosted online)
-1. User copies the prompt we give it, sends to codex, codex then uploads their agent sessions to remove lovable) 
-
-## Running Dots
-
-Node.js 22 recommended.
+Node.js 22.13 or newer:
 
 ```sh
 npm install
-npm run dev
+npm run build
+npm run dev:relay
 ```
 
-Open http://127.0.0.1:3000. Production: `npm run build` (output: `dist/`). Verification: `npm test`.
+In another terminal, run `npm run dev`, then open http://127.0.0.1:3000. The Vite frontend proxies the live relay to port 8787. The production worker serves both the built frontend and the same relay. `npm test` runs the source, room, validation, and behavior checks.
 
-The current build contains a Three.js character playground, six reference-based models, a Claw3D-derived office, camera/lighting controls, validated JSON agent snapshot import, and a local Codex session feed. Hosted account/session import is a separate workstream; the app distinguishes character previews from imported data.
+## Bring your agents and work together
 
-## Teammate ownership
+1. Choose **Import agents**, enter your name, then **Create live room**. In an invitation, choose **Join with my Codex → Join this live room**.
+2. Copy the live prompt into your own Codex. Choose an exact project and the actual session IDs you want to share.
+3. Codex downloads the inspectable Node bridge, lists the selected project's sessions read-only, and starts the bridge after you choose the IDs. Keep that terminal open while working.
+4. Use **Invite someone** to share the room link. Every visitor can join with their own selected sessions. Session IDs are scoped to each participant so contributors do not overwrite each other's agents.
 
-- [World and character workstream](docs/tasks/01-world-and-characters.md)
-- [Hosted Codex import workstream](docs/tasks/02-codex-import.md)
-- App shell, integration, and deployment coordination remain with the third workstream.
+The bridge reads the local `state_5.sqlite` index and bounded rollout tails, checks for changes every three seconds, sends changed minimal metadata, and renews unchanged connections with a small heartbeat about every twelve seconds. It does not execute Codex tasks or connect to an OpenAI account API. The uploader name is entered in Dots and bound to the participant credential. It sends session titles, source IDs, model, status, short activity labels, available context counts, and source timestamps. It excludes credentials, messages, reasoning, tool arguments/output, file contents, absolute paths, and full archives. Missing telemetry stays unavailable. Untitled sessions can be selected explicitly and show **Session title unavailable**.
 
-The shared data contract is in `src/types.ts`. Imported agents join the existing world and are saved in this browser across refreshes. The welcome card overlays the running world; its skip button dismisses it without resetting the scene. Do not commit real session exports or credentials.
+The browser subscribes to WebSocket room updates. A bridge that stops reporting becomes disconnected after 20 seconds. Its agents sit on the couch with a disconnected label, then are hidden from the room and roster after 30 minutes disconnected. Source-reported offline sessions follow the same retention rule. Restored heartbeats recover the same agents. A lost viewer connection hides live agents until the room reconnects. Completed/interrupted source events become idle; new task events become working. Stale working evidence becomes unknown. **Disconnect my agents** removes only your contribution immediately and revokes its upload credential. **Leave room** leaves the view; it does not stop a running bridge. Compact names stay directly above each character; older unnamed uploads show their real session title instead of an uploader placeholder.
 
-Office code and assets are adapted from [Claw3D](https://github.com/iamlukethedev/Claw3D); see `THIRD_PARTY_LICENSES/` for attribution and the source revision.
+Room links are private capabilities: everyone with a link can view the metadata shared into that room. There is no account login. Each participant receives a separate write credential stored only in their browser and copied into their bridge prompt. Rooms and credentials expire after 24 hours. Each room supports 50 agents and 100 simultaneous viewers. No room session metadata is committed to this repository.
 
-## Personalized rooms and invitations
+## Snapshot fallback and room customization
 
-Use **Personalize with LinkedIn or X** in the first-run Codex dialog, **Import social** in the top bar, or **Social import** in Room studio to choose LinkedIn or X. Enter a profile URL and supply a bio/headline or selected export files. LinkedIn accepts `Profile.csv`, `Skills.csv`, `Positions.csv`, and `Projects.csv`; X accepts `account.js`, `profile.js`, and `tweets.js` (or their JSON equivalents). The importer previews the name, topics, and suggested room palette before you apply it. The URL identifies the profile but cannot supply bio data on its own: this app does not fetch or scrape LinkedIn/X pages or connect to their APIs. Export files are parsed in the browser; only the derived room profile is saved locally, and X post text is used only to find topic hashtags. You can change or remove an imported look in **Room studio → Look**. This social import is separate from **Import agents**, which connects Codex sessions.
+**Import snapshot file** validates a version 1 JSON file up to 2 MB. Imported files are recorded snapshots and do not stream activity; working status is shown as unconfirmed. A file imported inside a live room is visible to its viewers as a snapshot. Outside a live room, imports remain in the current browser. Replay has been removed; only actual live events change activity. Live-room uploads strip history and use a 64 KiB metadata limit.
 
-The **Books** tab stores owner-written summaries of actual learning, optionally linked to a local agent session. Books appear as clickable objects in the room; opening them advances the local exploration counter. The **Projects** tab pins real projects to clickable wall posters. These room edits are stored in the current browser's local storage. No learning summary or project is inferred from a task title.
+**Room studio** stores room colors, owner-written books, real project links, and manually entered totals in the current browser. LinkedIn/X personalization uses supplied profile text or export files; a profile URL alone cannot fetch profile content. Its **Invite** tab creates a separate read-only snapshot invitation with optional fields off by default. Room customization is local; the live relay synchronizes agent metadata.
 
-The **Invite** tab creates a read-only snapshot link. The owner chooses whether to include their social link and interests, agent names/models/statuses, books, projects, and manually entered token/spending totals. All categories start off. Agent task text, current context telemetry, source session IDs, and recorded history are excluded from invitations. Per-agent token/spending totals appear only when both agents and totals are shared. Anyone with the link can read the selected snapshot; it is encoded in the URL fragment and is not a live connection. Friends can open the link directly or paste it into **Visit a friend's room**. There is no hosted room account, presence, revocation, or automatic spending feed yet.
+For development only, **Watch local Codex sessions** reads real sessions on this computer. It is restricted to loopback and never exposed by the public worker. Set `DOTS_SESSION_CWD` if automatic workspace selection is wrong.
 
-## Local Codex session feed
+## Capacity and deployment
 
-Choose **Watch local Codex sessions → Current workspace**. The local dev server reads up to 50 recent, non-archived sessions for the nearest Codex workspace containing this checkout. Set `DOTS_SESSION_CWD` to a specific session working directory if automatic selection is wrong. It refreshes every five seconds using the local Codex SQLite index and bounded tails of each session event log. Credentials, message bodies, and tool arguments/output are never returned. Live session data stays local. The production build includes a small, sanitized replay of actual project sessions from `src/data/project-example.json`, clearly labelled as a recorded example.
+See [the live office plan](docs/live-office-plan.md) for the import protocol, request/storage/fan-out model, costs, and production release gates. The author name is self-entered; account verification is a separate extension.
 
-- Recorded running work sends the character to a desk with a seated typing animation.
-- A completed/interrupted turn becomes idle and the character walks the central carpet between the desk rows.
-- Missing, unreadable, or stale running state is unknown; connection loss stops work animation.
-- **Parallel session replay** starts every imported session's recorded task at T+0. A shared clock preserves event spacing and task durations, with 1×, 10× and 60× playback, pause and restart controls. It does not execute or restart actual tasks.
-- A recent recorded parent/child delegation or session message call links two currently working characters in a short playful team-up. The room shows the link type and both names, never the message. A link fades after 90 seconds or when either session stops working. Other concurrent work remains at its desk. Imported version 1 snapshots may also include an optional `interactions` array with `fromId`, `toId`, `at`, and `kind` (`delegation` or `message`).
+`wrangler.jsonc` deploys a Cloudflare Worker with a SQLite-backed Durable Object per room and static assets from `dist`. No API keys or Codex credentials are deployed. `ALLOWED_ORIGIN` permits the existing https://dots-office.pages.dev frontend to call the relay. Rooms persist across worker restarts until expiry, then their data is deleted.
 
-This reader runs only on the loopback development server. The public site's remote pairing/upload flow is still owned by workstream 2. `server/codex-sessions.mjs` returns the shared `OfficeSnapshot` contract with optional recorded history and session links. Messages sent through tools that do not expose a structured destination in the rollout are not detected, so the room does not infer a link from coincident activity.
+```sh
+npm run build
+npx wrangler deploy
+```
 
-## Joining agents and desk capacity
+The worker URL can serve the complete app directly. For the existing Pages site, build with `VITE_LIVE_API_URL` set to the deployed worker origin, then deploy `dist` to the `dots-office` Pages project. Local development needs no frontend environment variable.
 
-Imports keep existing residents, update matching session IDs, and preserve recorded interaction links across refreshes. The room starts with 12 desks and expands its floor, furniture, and camera framing to give up to 50 imported agents distinct seats. Character previews do not occupy imported agents' seats.
-
-Friends can opt into sharing up to 50 agents through **Room studio → Invite**. A visitor can choose **Join snapshot with my agents** to combine that invitation with their existing imports, then use **Import agents** to add their Codex export. This creates a combined room in the visitor's browser. The invitation is still a snapshot: joining does not send data to the owner, synchronize browsers, execute tasks, or establish a live Codex connection. The public website supports JSON file imports; automatic uploads remain local development only.
+Office assets are adapted from [Claw3D](https://github.com/iamlukethedev/Claw3D); attribution is in `THIRD_PARTY_LICENSES/`.

@@ -27,18 +27,26 @@ export function liveInteractions(
 }
 
 const DESK_COLUMNS = [-5.8, -2.1, 1.6, -9.5, -13.2, -16.9, -20.6, -24.3, -28, -31.7];
+export const SHOWCASE_DESKS = [{ x: -5.8, z: 7.5 }, { x: -2.1, z: 7.5 }];
 export const DESKS = [
   ...DESK_COLUMNS.flatMap((x) => [-4.4, 3.6].map((z) => ({ x, z }))),
   ...[10.6, 17.6, 24.6].flatMap((z) => DESK_COLUMNS.map((x) => ({ x, z }))),
+  ...SHOWCASE_DESKS,
 ];
+export function loungeLayout(total: number) {
+  const sofas = Array.from({ length: Math.ceil(Math.max(12, Math.min(50, total)) / 2) }, (_, index) => ({
+    x: 6.3 + (index % 3) * 4.9, z: -4 + Math.floor(index / 3) * 4.3,
+  }));
+  return { sofas, seats: sofas.flatMap(({ x, z }) => [-1, 1].map(offset => ({ x: x + offset, z: z + 0.2 }))) };
+}
 export function officeLayout(total: number) {
   const desks = DESKS.slice(0, Math.max(12, Math.min(50, total)));
   const left = Math.min(-10.5, ...desks.map((desk) => desk.x * 1.15 - 2));
-  const bottom = Math.max(8, 7.8 + Math.floor(Math.max(0, total - 1) / 6) * 2, ...desks.map((desk) => desk.z * 1.15 + 3));
+  const bottom = Math.max(8, ...loungeLayout(total).sofas.map(sofa => sofa.z + 3), ...[...desks, ...SHOWCASE_DESKS].map((desk) => desk.z * 1.15 + 3));
   const carpetLeft = Math.min(...desks.map((desk) => desk.x)) * 1.15 - 0.6;
   const carpetRight = Math.max(...desks.map((desk) => desk.x)) * 1.15 + 1.8;
   const carpet = { x: (carpetLeft + carpetRight) / 2, z: 0.1, width: carpetRight - carpetLeft, depth: 3.7 };
-  return { desks, carpet, width: 10.5 - left, depth: bottom + 8, x: (left + 10.5) / 2, z: (bottom - 8) / 2 };
+  return { desks, carpet, width: 18.8 - left, depth: bottom + 8, x: (left + 18.8) / 2, z: (bottom - 8) / 2 };
 }
 // The GLB chair faces +Z; turn it toward the desk at -Z. Offsets include its off-centre pivot.
 export const CHAIR_PLACEMENT = { x: 0.8, z: -0.09, facing: 180 };
@@ -73,8 +81,11 @@ export function officePose(
   retrying = false,
   interaction?: { slot: number; side: "from" | "to" },
 ) {
-  if (status === "working" && retrying) return walkingPose(index, time, total);
-  if (status === "working" && interaction) {
+  if (status === "idle" || status === "offline") {
+    const seat = loungeLayout(total).seats[index];
+    return { ...seat, y: 0.42, facing: 0, walking: false, sitting: true };
+  }
+  if (status === "working" && interaction && !retrying) {
     const anchor = interaction.slot === 0 ? { x: 3.6, z: 2.5 } : { x: -4.2, z: 2.5 };
     const side = interaction.side === "from" ? -1 : 1;
     return {
@@ -97,13 +108,17 @@ export function officePose(
       sitting: true,
     };
   }
-  // Movement is visual only; resting/unconfirmed session statuses stay unchanged.
-  return walkingPose(index, time, total);
+  if (status === "preview") return walkingPose(index, time, total);
+  // Unconfirmed sources wait visibly without implying work or confirmed inactivity.
+  const { carpet } = officeLayout(total);
+  const columns = Math.max(1, Math.floor((carpet.width - 2) / 2.5));
+  return { x: carpet.x - carpet.width / 2 + 1 + (index % columns) * 2.5,
+    z: -0.9 + Math.floor(index / columns) * 0.5, y: 0.1, facing: 0, walking: false, sitting: false };
 }
 
 export const STATUS_LABELS: Record<AgentStatus | "preview", string> = {
   working: "Working at desk",
-  idle: "Waiting for a task",
+  idle: "Chilling on the sofa",
   offline: "Source disconnected",
   unknown: "Status not confirmed",
   blocked: "Needs your help",

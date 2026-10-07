@@ -1,0 +1,40 @@
+.room-camera {
+  position: absolute;
+  top: 66px;
+  left: 25px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid #dce3d1;
+  border-radius: 10px;
+  background: #fcfdf5ed;
+  box-shadow: 0 5px 15px #263c2010;
+}
+.room-camera button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  min-width: 36px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #526b4d;
+  font-size: 11px;
+}
+.room-camera button:hover, .room-camera button[aria-pressed="true"] { background: #e6ebdc; }
+.room-camera button:focus-visible { outline: 2px solid #526b4d; outline-offset: 2px; }
+.room-camera button:disabled { opacity: 0.45; cursor: default; }
+.room-camera > span { height: 20px; width: 1px; background: #dce3d1; margin: 0 3px; }
+.world .tibo-reset-hint { top: 66px; bottom: auto; max-width: 220px; font-size: 11px; }
+.world:has(.detail-card, .help-card, .connection-banner, .collaboration-banner) .tibo-reset-hint { display: none; }
+.world:has(.connection-banner, .collaboration-banner) .room-camera { top: 120px; }
+@media (max-width: 760px) {
+  .room-camera { top: 65px; left: 12px; right: 12px; width: fit-content; max-width: calc(100% - 24px); }
+  .room-camera button { min-width: 44px; min-height: 44px; }
+  .room-camera button span { display: none; }
+}

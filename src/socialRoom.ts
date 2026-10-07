@@ -110,6 +110,7 @@ export function createGuestRoom(input: {
       ? input.agents.slice(0, 50).map((agent, index) => ({
           id: `shared-${index}`,
           name: agent.name,
+          ownerName: agent.ownerName,
           harness: agent.harness,
           model: agent.model,
           status: agent.status,
@@ -117,6 +118,7 @@ export function createGuestRoom(input: {
           contextUsed: null,
           contextWindow: null,
           updatedAt: agent.updatedAt,
+          disconnectedAt: agent.disconnectedAt,
           ...(agent.character ? { character: agent.character } : {}),
         }))
       : [],
@@ -168,9 +170,11 @@ export function readGuestRoom(hash: string): GuestRoom | null {
       typeof agent.status === "string" && statuses.includes(agent.status) &&
       agent.name.length <= 100 && agent.harness.length <= 50).map((agent, index) => ({
         id: `shared-${index}`, name: agent.name, harness: agent.harness,
+        ...(typeof agent.ownerName === 'string' && agent.ownerName.trim() && agent.ownerName.length <= 60 ? { ownerName: agent.ownerName.trim() } : {}),
         model: typeof agent.model === "string" ? agent.model.slice(0, 80) : null,
         status: agent.status, task: null, contextUsed: null, contextWindow: null,
         updatedAt: typeof agent.updatedAt === "string" && Number.isFinite(Date.parse(agent.updatedAt)) ? agent.updatedAt : new Date(0).toISOString(),
+        ...(typeof agent.disconnectedAt === 'string' && Number.isFinite(Date.parse(agent.disconnectedAt)) ? { disconnectedAt: agent.disconnectedAt } : {}),
         ...(agent.character && characters.includes(agent.character) ? { character: agent.character } : {}),
       }));
     const books: KnowledgeBook[] = value.books.filter((book) => book && typeof book.title === "string" && typeof book.summary === "string").map((book, index) => ({

@@ -63,3 +63,11 @@ test("invitations retain all 50 shared agents without silent truncation", () => 
   assert.equal(guest.agents.length, 50);
   assert.equal(guest.agents.at(-1).name, "Session 49");
 });
+
+test('snapshot invitations preserve supplied identity and the original disconnection time', () => {
+  const disconnectedAt = '2026-10-07T12:00:00Z';
+  const room = createGuestRoom({ ...input, agents: [{ ...agent, ownerName: 'Room owner', status: 'offline', disconnectedAt }], share: { ...DEFAULT_SHARE, agents: true } });
+  const guest = readGuestRoom(new URL(invitationUrl(room, 'https://dots.example/')).hash);
+  assert.equal(guest.agents[0].ownerName, 'Room owner');
+  assert.equal(guest.agents[0].disconnectedAt, disconnectedAt);
+});

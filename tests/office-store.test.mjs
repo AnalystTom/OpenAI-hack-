@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mergeOfficeAgents, readSavedOffice, serializeOffice } from "../src/officeStore.ts";
-import { createOfficeReplay, appendOfficeReplay, replayOffice } from "../src/officeReplay.ts";
 
 const recorded = (id) => ({
   id, name: id, harness: "Codex", model: null, task: null,
@@ -22,16 +21,6 @@ test("imports join existing residents, deduplicate and preserve newer source dat
   assert.deepEqual(mergeOfficeAgents(merged, [a, b]), merged);
   assert.deepEqual(readSavedOffice({ getItem: () => serializeOffice(merged) }).agents, merged);
   assert.ok(readSavedOffice({ getItem: () => "broken" }).error);
-});
-
-test("joining a replay preserves old clocks and starts the new agent at arrival", () => {
-  let replay = createOfficeReplay([recorded("a")]);
-  replay = appendOfficeReplay(replay, [recorded("b")], 30000);
-  assert.equal(replay.durationMs, 90000);
-  assert.deepEqual(replayOffice(replay, 60000).map(a => a.status), ["idle", "working"]);
-  replay = appendOfficeReplay(replay, [recorded("a"), recorded("b")], 60000);
-  assert.equal(replay.agents.length, 2);
-  assert.deepEqual(replayOffice(replay, 90000).map(a => a.status), ["idle", "idle"]);
 });
 
 test("recorded session links survive saving and refresh", () => {

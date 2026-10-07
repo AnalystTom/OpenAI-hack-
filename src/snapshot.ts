@@ -41,6 +41,10 @@ export function parseOfficeSnapshot(text: string): OfficeSnapshot {
       );
     if (a.activityLabel !== undefined && a.activityLabel !== null && (typeof a.activityLabel !== "string" || a.activityLabel.length > 160))
       throw new Error("Activity label must be short text or null.");
+    if (a.ownerName !== undefined && (typeof a.ownerName !== "string" || !a.ownerName.trim() || a.ownerName.length > 60))
+      throw new Error("Uploader name must contain 1 to 60 characters.");
+    if (a.disconnectedAt !== undefined && (typeof a.disconnectedAt !== "string" || !Number.isFinite(Date.parse(a.disconnectedAt))))
+      throw new Error("Disconnected time must be a valid timestamp.");
     if (a.cost !== undefined) {
       if (!a.cost || (a.cost.estimatedUSD !== null &&
           (typeof a.cost.estimatedUSD !== "number" || !Number.isFinite(a.cost.estimatedUSD) || a.cost.estimatedUSD < 0)) ||

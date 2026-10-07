@@ -8,7 +8,6 @@ import { toolActivityLabel } from "./activity-label.mjs";
 
 const MAX_TAIL_BYTES = 2 * 1024 * 1024;
 const ACTIVE_LEASE_MS = 5 * 60 * 1000;
-const DEMO_TITLES = ["Review recorded replay correctness", "Review 3D office movement", "Audit office accessibility", "Audit session import security", "Write five-minute Dots demo script", "Check Lovable deployment readiness"];
 const validTime = (value) => {
   const ms = typeof value === "number" ? value * 1000 : Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
@@ -174,7 +173,7 @@ export async function readRobotsSessions({
   let rows, total, edges = [], selectedProject;
   try {
     selectedProject = project ?? process.env.DOTS_SESSION_CWD ?? process.env.DOTS_CODEX_PROJECT ?? workspaceProject(database);
-    const filters = `${includeArchived ? "" : "archived=0 AND "}cwd=? AND (length(name)>0 OR length(title)>0)`
+    const filters = `${includeArchived ? "" : "archived=0 AND "}cwd=?${threadIds.length ? '' : ' AND (length(name)>0 OR length(title)>0)'}`
       + (titles.length ? ` AND name IN (${titles.map(() => "?").join(",")})` : "")
       + (threadIds.length ? ` AND id IN (${threadIds.map(() => "?").join(",")})` : "");
     const args = [selectedProject, ...titles, ...threadIds];
@@ -220,12 +219,15 @@ export async function readRobotsSessions({
         /* Unreadable source remains explicitly unknown. */
       }
       const { outbound, ...state } = observed;
+      // Some Codex indexes use the entire first prompt as title. Never export that.
+      const title = row.name?.trim() || row.title?.trim();
+      const safeTitle = title && title.length <= 300 && !/[\r\n]/.test(title) && !/(?:\/Users\/|\/home\/|[A-Z]:\\)/.test(title) ? title : null;
       return { outbound, agent: {
         id: row.id,
-        name: row.name?.trim() || row.title.trim(),
+        name: safeTitle ?? "Session title unavailable",
         harness: "Codex",
         model: row.model || null,
-        task: row.name?.trim() || row.title.trim(),
+        task: safeTitle,
         ...state,
         updatedAt:
           observed.updatedAt ?? new Date(row.updated_at * 1000).toISOString(),
@@ -305,16 +307,12 @@ export function localCodexPlugin() {
         }
         try {
           const source = new URL(req.url, "http://localhost").searchParams.get("source") ?? "workspace";
-          if (!["workspace", "robots", "demo", "design"].includes(source)) {
+          if (source !== "workspace") {
             res.statusCode = 400;
             res.end(JSON.stringify({ error: "Unknown session source." }));
             return;
           }
-          const options = source === "workspace" ? {} : source === "robots" ? { project: path.join(homedir(), "Dev", "Robots") } : {
-            project: path.resolve(import.meta.dirname, ".."),
-            ...(source === "demo" ? { titles: DEMO_TITLES, includeArchived: true } : { threadIds: ["01a1126d-f25f-7162-ba0e-87456aba835d"] }),
-          };
-          res.end(JSON.stringify(await readRobotsSessions(options)));
+          res.end(JSON.stringify(await readRobotsSessions()));
         } catch {
           res.statusCode = 503;
           res.end(

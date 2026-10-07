@@ -1,7 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { officePose, officeLayout, agentCharacter, liveInteractions } from "../src/officeBehavior.ts";
-test("working agents use desks while unoccupied agents walk the room", () => {
+test("every idle agent has a distinct sofa seat inside the expanded lounge", () => {
+  for (const total of [1, 12, 25, 50]) {
+    const layout = officeLayout(total), occupied = new Set();
+    for (let index = 0; index < total; index++) {
+      const idle = officePose('idle', index, 0, total);
+      occupied.add(`${idle.x}:${idle.z}`);
+      assert.equal(idle.sitting, true);
+      assert.equal(idle.walking, false);
+      assert.deepEqual(idle, officePose('idle', index, 60, total));
+      assert.ok(idle.x > 4 && idle.x < layout.x + layout.width / 2);
+      assert.ok(idle.z > -8 && idle.z < layout.z + layout.depth / 2);
+      assert.notDeepEqual(idle, officePose('working', index, 0, total), 'new work returns to its own desk');
+    }
+    assert.equal(occupied.size, total);
+  }
+});
+test("working agents use desks while idle agents sit on sofas", () => {
   const positions = new Set();
   for (let i = 0; i < 6; i++) {
     const desk = officePose("working", i, 0, 6);
@@ -11,10 +27,10 @@ test("working agents use desks while unoccupied agents walk the room", () => {
     positions.add(`${desk.x}:${desk.z}`);
   }
   assert.equal(positions.size, 6);
-  assert.equal(officePose("idle", 0, 0, 6).walking, true);
-  assert.equal(officePose("unknown", 1, 0, 6).walking, true);
-  assert.equal(officePose("idle", 2, 0, 6).walking, true);
-  assert.notDeepEqual(officePose("idle", 2, 0, 6), officePose("idle", 2, 10, 6));
+  assert.equal(officePose("idle", 0, 0, 6).sitting, true);
+  assert.equal(officePose("unknown", 1, 0, 6).walking, false);
+  assert.equal(officePose("idle", 2, 0, 6).walking, false);
+  assert.deepEqual(officePose("idle", 2, 0, 6), officePose("idle", 2, 10, 6));
   assert.notDeepEqual(officePose("working", 0, 0, 6, false, { slot: 0, side: "from" }), officePose("working", 1, 0, 6, false, { slot: 0, side: "to" }));
   const from = officePose("working", 0, 0, 6, false, { slot: 0, side: "from" });
   const to = officePose("working", 1, 0, 6, false, { slot: 0, side: "to" });
@@ -38,11 +54,13 @@ test("only recent recorded links between two working sessions trigger team play"
   assert.deepEqual(liveInteractions(agents, [link("a", "b", -30000)], now), []);
 });
 test("unconfirmed sessions rest or walk without simulating work; character mapping survives reordering", () => {
-  for (const status of ["offline", "unknown", "blocked", "error"]) {
+  for (const status of ["unknown", "blocked", "error"]) {
     const pose = officePose(status, 2, 10, 6);
     assert.equal(pose.sitting, false);
-    assert.equal(pose.walking, true);
+    assert.equal(pose.walking, false);
   }
+  assert.equal(officePose('offline', 2, 10, 6).sitting, true);
+  assert.equal(officePose('offline', 2, 10, 6).walking, false);
   const ids = ["session-a", "session-b", "session-c"];
   assert.deepEqual(ids.map(agentCharacter), [...ids].reverse().map(agentCharacter).reverse());
   const appearances = new Set(Array.from({length: 30}, (_, i) => agentCharacter(`session-${i}`)));
@@ -71,11 +89,11 @@ test("all 50 imported agents have distinct desks inside the expanded room", () =
   assert.equal(officeLayout(18).desks.length, 18);
 });
 
-test("all non-working statuses follow the central carpet without parking", () => {
+test("character previews still walk the central carpet", () => {
   for (const total of [1, 6, 12, 25, 50]) {
     const { carpet } = officeLayout(total);
     assert.ok(carpet.width > 20);
-    for (const status of ["preview", "idle", "unknown", "offline", "blocked", "error"]) {
+    for (const status of ["preview"]) {
       for (const time of [0, 10, 30, 60, 180]) {
         for (let i = 0; i < total; i++) {
           const a = officePose(status, i, time, total);

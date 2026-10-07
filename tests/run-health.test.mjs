@@ -50,11 +50,11 @@ test("context pressure uses the latest reported input, not total usage", () => {
   assert.equal(parse(start, tokens, start).contextUsed, null);
 });
 
-test("retrying and offline agents follow the central carpet circuit", () => {
+test("retries stay at their desks while disconnected agents wait for a signal", () => {
   const a = officePose("working", 0, 0, 6, true), b = officePose("working", 3, 0, 6, true);
-  assert.equal(a.walking, true); assert.equal(a.sitting, false);
-  assert.ok(Math.abs(a.x - b.x) > 20);
-  assert.equal(officePose("offline", 0, 0, 6, true).walking, true);
+  assert.equal(a.walking, false); assert.equal(a.sitting, true);
+  assert.notEqual(a.x, b.x);
+  assert.equal(officePose("offline", 0, 0, 6, true).walking, false);
   assert.equal(officePose("working", 0, 0, 6, false).sitting, true);
 });
 

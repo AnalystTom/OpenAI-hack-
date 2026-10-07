@@ -3,7 +3,6 @@ import type { OfficeSnapshot } from "../../types";
 import { parseOfficeSnapshot } from "../../snapshot";
 
 export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void) {
-  const [source, setSource] = useState(() => sessionStorage.getItem("dots-local-source") ?? "workspace");
   const [connected, setConnected] = useState(
     () => sessionStorage.getItem("dots-robots-connected") === "yes",
   );
@@ -11,6 +10,7 @@ export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void
     "disconnected" | "loading" | "connected" | "error"
   >("disconnected");
   const [error, setError] = useState("");
+  const [disconnectedAt, setDisconnectedAt] = useState<string | undefined>();
   const [observedAt, setObservedAt] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [project, setProject] = useState("");
@@ -24,9 +24,7 @@ export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void
     setObservedAt(null);
     setProject("");
   }, []);
-  const connect = useCallback((nextSource = "workspace") => {
-    sessionStorage.setItem("dots-local-source", nextSource);
-    setSource(nextSource);
+  const connect = useCallback(() => {
     setState("loading");
     receive.current({ version: 1, agents: [] });
     sessionStorage.setItem("dots-robots-connected", "yes");
@@ -42,7 +40,7 @@ export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void
         previous === "connected" || previous === "error" ? previous : "loading",
       );
       try {
-        const response = await fetch(`/api/local-codex/robots?source=${encodeURIComponent(source)}`, {
+        const response = await fetch("/api/local-codex/robots", {
           signal: AbortSignal.any([
             controller.signal,
             AbortSignal.timeout(5000),
@@ -64,10 +62,12 @@ export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void
         setProject(typeof data.project === "string" ? data.project : "");
         setObservedAt(data.observedAt);
         setState("connected");
+        setDisconnectedAt(undefined);
         setError("");
       } catch (e) {
         if (cancelled) return;
         setState("error");
+        setDisconnectedAt(previous => previous ?? new Date().toISOString());
         setError(e instanceof Error ? e.message : "Connection lost.");
       }
       if (!cancelled) timer = setTimeout(refresh, 5000);
@@ -78,16 +78,16 @@ export function useRobotsSessions(onSnapshot: (snapshot: OfficeSnapshot) => void
       controller.abort();
       clearTimeout(timer);
     };
-  }, [connected, source]);
+  }, [connected]);
   return {
     connect,
     disconnect,
     state,
     error,
+    disconnectedAt,
     observedAt,
     total,
     project,
     enabled: connected,
-    source,
   };
 }
